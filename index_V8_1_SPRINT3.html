@@ -1,0 +1,3744 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChargeGrid — V8.1 Sprint 3 • Protótipo Funcional</title>
+  <meta name="description" content="Protótipo funcional simulado do ChargeGrid com integração energética, automação inteligente, sessões de recarga e monitoramento em tempo real.">
+  <meta name="theme-color" content="#050914">
+
+  <link rel="icon" href="data:,">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #050914;
+      --panel: #091221;
+      --text: #eef5ff;
+      --muted: #a9b8ca;
+      --blue: #1677ff;
+      --cyan: #38c8ff;
+      --green: #22d35c;
+      --yellow: #ffc94a;
+      --red: #ff4e4e;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    button { font: inherit; }
+    #game { position: fixed; inset: 0; }
+
+    #loading {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      z-index: 500;
+      padding: 10px 14px;
+      border-radius: 8px;
+      color: #fff;
+      background: rgba(0,0,0,.65);
+      font-size: 13px;
+      backdrop-filter: blur(6px);
+    }
+
+    #startScreen {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(15,35,70,.96), rgba(2,5,12,.99));
+    }
+
+    #startPanel {
+      width: min(520px, calc(100vw - 40px));
+      padding: 42px;
+      border-radius: 18px;
+      text-align: center;
+      background: rgba(8,14,28,.96);
+      box-shadow: 0 20px 70px rgba(0,0,0,.45);
+    }
+
+    #startPanel h1 {
+      margin: 0 0 8px;
+      color: #fff;
+      font-size: 42px;
+      letter-spacing: 4px;
+    }
+
+    #startPanel h2 {
+      margin: 0 0 28px;
+      color: var(--cyan);
+      font-size: 15px;
+      font-weight: normal;
+      letter-spacing: 3px;
+    }
+
+    #startPanel p {
+      margin: 8px 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    #startButton {
+      margin-top: 28px;
+      padding: 15px 28px;
+      border: 0;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #1677ff, #00b7ff);
+      color: #fff;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #startButton:disabled { opacity: .45; cursor: default; }
+
+    #hud {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    #crosshair {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-left: -4px;
+      margin-top: -4px;
+      border: 1px solid rgba(255,255,255,.9);
+      border-radius: 50%;
+    }
+
+    #status, #stateChip, #lockChip, #demoChip {
+      position: absolute;
+      left: 18px;
+      padding: 8px 11px;
+      border-radius: 8px;
+      background: rgba(0,0,0,.55);
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: .45px;
+      backdrop-filter: blur(5px);
+    }
+
+    #status {
+      top: 18px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: normal;
+      letter-spacing: 0;
+    }
+
+    #stateChip { top: 62px; color: var(--cyan); }
+    #lockChip { top: 94px; color: var(--red); }
+    #lockChip.unlocking { color: var(--yellow); }
+    #lockChip.unlocked { color: var(--green); }
+    #demoChip { top: 126px; color: #d7e7f8; }
+
+    #controlsHint {
+      position: absolute;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      padding: 9px 14px;
+      border-radius: 8px;
+      color: #dbe7f6;
+      background: rgba(0,0,0,.48);
+      font-size: 12px;
+    }
+
+    #interactPrompt {
+      position: absolute;
+      left: 50%;
+      bottom: 85px;
+      transform: translateX(-50%);
+      padding: 12px 18px;
+      border-radius: 10px;
+      color: #fff;
+      background: rgba(10,85,150,.94);
+      font-size: 14px;
+      font-weight: bold;
+      opacity: 0;
+      transition: opacity .15s ease;
+    }
+
+    #objectiveChip {
+      position: absolute;
+      left: 18px;
+      bottom: 20px;
+      max-width: min(480px, calc(100vw - 36px));
+      padding: 10px 13px;
+      border-radius: 9px;
+      color: #eef5ff;
+      background: rgba(5,15,28,.72);
+      border: 1px solid rgba(56,200,255,.16);
+      font-size: 12px;
+      line-height: 1.4;
+      backdrop-filter: blur(6px);
+    }
+
+    .demoGuide {
+      margin-top: 24px;
+      padding: 16px 18px;
+      border-radius: 12px;
+      text-align: left;
+      background: rgba(56,200,255,.055);
+      border: 1px solid rgba(56,200,255,.13);
+    }
+
+    .demoGuide strong { color: #fff; }
+    .demoGuide div { margin: 7px 0; color: var(--muted); font-size: 13px; }
+
+    .startBadge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding: 7px 11px;
+      border: 1px solid rgba(56,200,255,.18);
+      border-radius: 999px;
+      color: #dff6ff;
+      background: rgba(56,200,255,.07);
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 1.2px;
+    }
+
+    .startFocus {
+      margin-top: 18px;
+      padding: 13px 15px;
+      border-radius: 11px;
+      color: #edf7ff;
+      background: linear-gradient(135deg, rgba(22,119,255,.10), rgba(56,200,255,.045));
+      border: 1px solid rgba(56,200,255,.15);
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: left;
+    }
+
+    .startFocus strong { color: var(--cyan); }
+
+    .objectiveProgress {
+      width: 100%;
+      height: 4px;
+      margin-top: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255,255,255,.07);
+    }
+
+    #objectiveProgressFill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--blue), var(--cyan));
+      transition: width .35s ease;
+    }
+
+    .milestoneToast {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      z-index: 290;
+      width: min(520px, calc(100vw - 40px));
+      padding: 22px 24px;
+      border-radius: 16px;
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, -44%) scale(.96);
+      transition: opacity .22s ease, transform .22s ease;
+      background: rgba(5,15,28,.96);
+      border: 1px solid rgba(56,200,255,.24);
+      box-shadow: 0 24px 80px rgba(0,0,0,.48);
+      backdrop-filter: blur(10px);
+    }
+
+    .milestoneToast.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .milestoneIcon {
+      width: 54px;
+      height: 54px;
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      color: var(--cyan);
+      background: rgba(56,200,255,.10);
+      font-size: 26px;
+      font-weight: bold;
+    }
+
+    .milestoneToast.success {
+      border-color: rgba(34,211,92,.28);
+    }
+
+    .milestoneToast.success .milestoneIcon {
+      color: var(--green);
+      background: rgba(34,211,92,.11);
+    }
+
+    .milestoneToast.warning {
+      border-color: rgba(255,201,74,.28);
+    }
+
+    .milestoneToast.warning .milestoneIcon {
+      color: var(--yellow);
+      background: rgba(255,201,74,.11);
+    }
+
+    .milestoneEyebrow {
+      margin-bottom: 6px;
+      color: var(--cyan);
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 1.5px;
+    }
+
+    .milestoneToast h3 {
+      margin: 0 0 7px;
+      color: #fff;
+      font-size: 22px;
+    }
+
+    .milestoneToast p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .completionChecklist {
+      display: grid;
+      gap: 9px;
+      margin-top: 14px;
+    }
+
+    .completionItem {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 9px;
+      color: #dff6e6;
+      background: rgba(34,211,92,.055);
+      border: 1px solid rgba(34,211,92,.10);
+      font-size: 12px;
+    }
+
+    .completionItem span {
+      color: var(--green);
+      font-weight: bold;
+    }
+
+    .inputField {
+      width: 100%;
+      padding: 12px 13px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 9px;
+      outline: none;
+      color: #fff;
+      background: rgba(255,255,255,.045);
+      font: inherit;
+    }
+
+    .inputField:focus { border-color: var(--cyan); }
+    .inputField[readonly] { color: var(--muted); }
+
+    .fieldLabel {
+      display: block;
+      margin: 0 0 7px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: .9px;
+      text-transform: uppercase;
+    }
+
+    .fieldGroup { margin-bottom: 14px; }
+
+    .inlineNotice {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #cfeeff;
+      background: rgba(56,200,255,.06);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .lockStatusBox {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+      padding: 13px 14px;
+      border-radius: 10px;
+      background: rgba(255,78,78,.07);
+      border: 1px solid rgba(255,78,78,.14);
+      color: #fff;
+    }
+
+    .lockStatusBox strong { color: var(--red); }
+    .lockStatusBox.unlocked { background: rgba(34,211,92,.07); border-color: rgba(34,211,92,.16); }
+    .lockStatusBox.unlocked strong { color: var(--green); }
+
+    #energyHUD {
+      position: fixed;
+      top: 75px;
+      right: 18px;
+      z-index: 110;
+      width: 250px;
+      padding: 16px;
+      border-radius: 14px;
+      background: rgba(6,15,27,.90);
+      border: 1px solid rgba(56,200,255,.18);
+      box-shadow: 0 15px 50px rgba(0,0,0,.28);
+      backdrop-filter: blur(8px);
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity .35s ease, transform .35s ease;
+      pointer-events: none;
+    }
+
+    #energyHUD.active { opacity: 1; transform: translateY(0); }
+
+    .energyTitle {
+      margin-bottom: 12px;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 1.4px;
+    }
+
+    .energyRow {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .energyRow strong { color: #fff; }
+
+    .energyDistribution {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,.08);
+    }
+
+    .powerBar {
+      width: 100%;
+      height: 6px;
+      margin: 5px 0 9px;
+      overflow: hidden;
+      border-radius: 20px;
+      background: rgba(255,255,255,.07);
+    }
+
+    .powerFill {
+      width: 0;
+      height: 100%;
+      border-radius: 20px;
+      background: linear-gradient(90deg, var(--blue), var(--cyan));
+      transition: width .8s ease;
+    }
+
+    .energySectionLabel {
+      margin: 12px 0 7px;
+      color: var(--cyan);
+      font-size: 9px;
+      font-weight: bold;
+      letter-spacing: 1.1px;
+      text-transform: uppercase;
+    }
+
+    #energyHUD {
+      width: 300px;
+      max-height: calc(100vh - 96px);
+    }
+
+    #interactionOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 250;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(1,5,12,.74);
+      backdrop-filter: blur(8px);
+    }
+
+    #interactionPanel {
+      width: min(560px, calc(100vw - 36px));
+      max-height: calc(100vh - 36px);
+      overflow-y: auto;
+      padding: 28px;
+      border: 1px solid rgba(80,180,255,.18);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(11,25,43,.99), rgba(6,15,27,.99));
+      box-shadow: 0 30px 100px rgba(0,0,0,.55);
+    }
+
+    .panel { display: none; }
+
+    .panelHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .panelHeader h2 { margin: 0; color: #fff; font-size: 24px; }
+
+    .badge {
+      padding: 7px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    .badgeGreen { color: var(--green); background: rgba(34,211,92,.1); }
+    .badgeYellow { color: var(--yellow); background: rgba(255,201,74,.1); }
+
+    .section {
+      margin-bottom: 20px;
+      padding: 17px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.035);
+    }
+
+    .sectionTitle {
+      margin-bottom: 13px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 1.3px;
+      text-transform: uppercase;
+    }
+
+    .infoGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 12px;
+    }
+
+    .infoBox {
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(255,255,255,.035);
+    }
+
+    .infoLabel { margin-bottom: 5px; color: var(--muted); font-size: 11px; }
+    .infoValue { color: #fff; font-size: 16px; font-weight: bold; }
+
+    .option {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      padding: 13px 14px;
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 10px;
+      background: rgba(255,255,255,.025);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .option.active { border-color: var(--cyan); background: rgba(56,200,255,.09); }
+    .option small { display: block; margin-top: 3px; color: var(--muted); }
+
+    .priceHero {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 12px;
+      padding: 16px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(22,119,255,.11), rgba(56,200,255,.055));
+      border: 1px solid rgba(56,200,255,.18);
+    }
+
+    .priceHero span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+
+    .priceHero strong {
+      display: block;
+      margin-top: 4px;
+      color: #fff;
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .paymentMethods {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .paymentMethod {
+      min-height: 90px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 11px;
+      color: #fff;
+      background: rgba(255,255,255,.025);
+      cursor: pointer;
+      text-align: left;
+      transition: border-color .16s ease, background .16s ease, transform .16s ease;
+    }
+
+    .paymentMethod:hover { transform: translateY(-1px); border-color: rgba(56,200,255,.42); }
+    .paymentMethod.active { border-color: var(--cyan); background: rgba(56,200,255,.09); }
+    .paymentMethodIcon { display: block; margin-bottom: 8px; font-size: 22px; }
+    .paymentMethod strong { display: block; font-size: 12px; }
+    .paymentMethod small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+
+    .pitchTag {
+      display: inline-flex;
+      margin-top: 10px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      color: #cfeeff;
+      background: rgba(56,200,255,.055);
+      border: 1px solid rgba(56,200,255,.12);
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: .65px;
+    }
+
+    .statusBox {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      color: var(--cyan);
+      background: rgba(56,200,255,.06);
+      font-size: 13px;
+    }
+
+    .result { text-align: center; }
+
+    .resultIcon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 66px;
+      height: 66px;
+      margin: 5px auto 16px;
+      border-radius: 50%;
+      font-size: 34px;
+    }
+
+    .green { color: var(--green); background: rgba(34,211,92,.1); }
+    .cyan { color: var(--cyan); background: rgba(56,200,255,.1); }
+    .yellow { color: var(--yellow); background: rgba(255,201,74,.1); }
+
+    .result h3 { margin: 0 0 8px; color: #fff; font-size: 23px; }
+    .result p { margin: 0; color: var(--muted); line-height: 1.5; }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .btn {
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .btnPrimary { color: #fff; background: linear-gradient(135deg,#1677ff,#00b7ff); }
+    .btnSecondary { color: #dce6f4; background: rgba(255,255,255,.07); }
+    .btnSuccess { color: #fff; background: linear-gradient(135deg,#14ad4a,#32d96e); }
+    .btnWarning { color: #151006; background: linear-gradient(135deg,#d99500,#ffc94a); }
+
+    .processing { padding: 25px 0; text-align: center; color: #fff; }
+
+    /* V8.1: painel de sessão ativa compacto para demonstração técnica sem scroll. */
+    #interactionPanel.chargingCompact {
+      width: min(820px, calc(100vw - 36px));
+      padding: 22px;
+      overflow-y: auto;
+    }
+
+    .chargingHero {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(34,211,92,.075), rgba(56,200,255,.04));
+      border: 1px solid rgba(34,211,92,.13);
+    }
+
+    .chargingHero .resultIcon {
+      flex: 0 0 auto;
+      width: 46px;
+      height: 46px;
+      margin: 0;
+      font-size: 23px;
+    }
+
+    .chargingHero h3 { margin: 0 0 3px; color: #fff; font-size: 20px; }
+    .chargingHero p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+    .chargingColumns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .chargingColumns .section { margin-bottom: 0; padding: 14px; }
+    .chargingColumns .infoGrid { gap: 8px; }
+    .chargingColumns .infoBox { padding: 9px 10px; }
+    .chargingColumns .infoValue { font-size: 15px; }
+
+    .chargingSessionStrip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .chargingSessionStrip .infoBox {
+      min-height: 64px;
+      padding: 9px 10px;
+      background: rgba(255,255,255,.035);
+    }
+
+    .chargingSessionStrip .infoValue { font-size: 14px; }
+    .chargingSessionStrip .automationValue { font-size: 12px; line-height: 1.2; }
+
+    .chargingCompact .statusBox { margin-top: 12px; padding: 9px 11px; font-size: 11px; }
+    .chargingCompact .actions { margin-top: 12px; }
+
+    @media (max-width: 760px) {
+      .chargingColumns { grid-template-columns: 1fr; }
+      .chargingSessionStrip { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+
+    .spinner {
+      width: 35px;
+      height: 35px;
+      margin: 0 auto 18px;
+      border: 4px solid rgba(255,255,255,.15);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 600px) {
+      #startPanel { padding: 28px; }
+      #startPanel h1 { font-size: 34px; }
+      .infoGrid { grid-template-columns: 1fr; }
+      .paymentMethods { grid-template-columns: 1fr; }
+      .actions { flex-direction: column; }
+      .btn { width: 100%; }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="game"></div>
+
+  <div id="startScreen">
+    <div id="startPanel">
+      <div class="startBadge">V8.1 • SPRINT 3 • PROTÓTIPO FUNCIONAL</div>
+      <h1>CHARGEGRID</h1>
+      <h2>SMART EV CHARGING</h2>
+      <p>Protótipo virtual navegável para demonstrar a integração entre recarga, geração solar, bateria, rede elétrica, automação e monitoramento energético.</p>
+
+      <div class="startFocus">
+        <strong>FOCO DA SIMULAÇÃO FUNCIONAL</strong><br>
+        Execute uma sessão completa e acompanhe o Energy Engine redistribuindo potência entre os veículos com base na geração solar, limite da rede, bateria e consumo do prédio.
+      </div>
+
+      <div class="demoGuide">
+        <div><strong>1.</strong> Explore o eletroposto em primeira pessoa.</div>
+        <div><strong>2.</strong> Vá até o Charger 03 e pressione <strong>E</strong>.</div>
+        <div><strong>3.</strong> Identifique o cliente e configure a sessão.</div>
+        <div><strong>4.</strong> Autorize a sessão pelo pagamento simulado e acompanhe a liberação da trava.</div>
+        <div><strong>5.</strong> Retire o conector, conecte ao EV 03, inicie e encerre a carga.</div>
+        <div><strong>6.</strong> Durante a carga, acompanhe potência, origem da energia, kWh, custo e tempo simulado.</div>
+        <div><strong>7.</strong> Encerre a sessão, devolva o conector e acompanhe o travamento final.</div>
+      </div>
+
+      <p><strong>WASD</strong> mover • <strong>Mouse</strong> olhar • <strong>Shift</strong> correr • <strong>Espaço</strong> pular</p>
+      <button id="startButton" disabled>CARREGANDO...</button>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="status">CHARGEGRID • INICIALIZANDO</div>
+    <div id="stateChip">ETAPA: CARREGANDO</div>
+    <div id="lockChip">TRAVA: 🔴 TRAVADA</div>
+    <div id="demoChip">MODO: SPRINT 3 • SIMULAÇÃO 60×</div>
+    <div id="objectiveChip">
+      <div id="objectiveText">OBJETIVO: Carregando maquete...</div>
+      <div class="objectiveProgress"><div id="objectiveProgressFill"></div></div>
+    </div>
+    <div id="controlsHint">WASD • Mouse • Espaço • Shift • E</div>
+    <div id="interactPrompt">[E] Interagir</div>
+  </div>
+
+  <div id="milestoneToast" class="milestoneToast" aria-live="polite">
+    <div id="milestoneIcon" class="milestoneIcon">✓</div>
+    <div class="milestoneEyebrow">CHARGEGRID • PROTÓTIPO FUNCIONAL</div>
+    <h3 id="milestoneTitle">Etapa concluída</h3>
+    <p id="milestoneText">Continue o fluxo do protótipo.</p>
+  </div>
+
+  <div id="energyHUD">
+    <div class="energyTitle">ENERGY ENGINE • SIMULAÇÃO FUNCIONAL</div>
+
+    <div class="energySectionLabel">Fontes e infraestrutura</div>
+    <div class="energyRow"><span>Solar</span><strong id="hudSolar">0 kW</strong></div>
+    <div class="energyRow"><span>Rede</span><strong id="hudGrid">0 kW</strong></div>
+    <div class="energyRow"><span>Bateria</span><strong id="hudBattery">72% • 0 kW</strong></div>
+    <div class="energyRow"><span>Prédio</span><strong id="hudBuilding">32 kW</strong></div>
+    <div class="energyRow"><span>Limite da rede</span><strong id="hudLimit">35 kW</strong></div>
+    <div class="energyRow"><span>Disponível p/ EVs</span><strong id="hudAvailable">0 kW</strong></div>
+
+    <div class="energyDistribution">
+      <div class="energySectionLabel">Distribuição inteligente</div>
+      <div class="energyRow"><span>EV 01</span><strong id="hudEV01">0 kW</strong></div>
+      <div class="powerBar"><div id="barEV01" class="powerFill"></div></div>
+
+      <div class="energyRow"><span>EV 02</span><strong id="hudEV02">0 kW</strong></div>
+      <div class="powerBar"><div id="barEV02" class="powerFill"></div></div>
+
+      <div class="energyRow"><span>EV 03</span><strong id="hudEV03">0 kW</strong></div>
+      <div class="powerBar"><div id="barEV03" class="powerFill"></div></div>
+
+      <div class="energyRow"><span>Total EVs</span><strong id="hudTotal">0 kW</strong></div>
+
+      <div class="energySectionLabel">Sessão EV 03</div>
+      <div class="energyRow"><span>Tempo simulado</span><strong id="hudSessionTime">00:00</strong></div>
+      <div class="energyRow"><span>Energia entregue</span><strong id="hudSessionEnergy">0.00 kWh</strong></div>
+      <div class="energyRow"><span>Custo atual</span><strong id="hudSessionCost">R$ 0,00</strong></div>
+      <div class="energyRow"><span>Origem renovável</span><strong id="hudRenewable">0%</strong></div>
+    </div>
+  </div>
+
+  <div id="loading">Carregando ChargeGrid...</div>
+
+  <div id="interactionOverlay">
+    <div id="interactionPanel">
+
+
+      <div id="identificationPanel" class="panel">
+        <div class="panelHeader">
+          <h2>Identificação</h2>
+          <div class="badge badgeGreen">SIMULAÇÃO</div>
+        </div>
+
+        <div class="section">
+          <div class="sectionTitle">Cliente</div>
+
+          <div class="fieldGroup">
+            <label class="fieldLabel" for="customerName">Nome</label>
+            <input id="customerName" class="inputField" type="text" value="Cliente Simulado" maxlength="40">
+          </div>
+
+          <div class="fieldGroup">
+            <label class="fieldLabel" for="customerVehicle">Veículo</label>
+            <input id="customerVehicle" class="inputField" type="text" value="EV 03" readonly>
+          </div>
+
+          <div id="identificationError" class="inlineNotice" style="display:none; color:#ffb5b5; background:rgba(255,78,78,.07);">
+            Informe um nome para continuar a simulação.
+          </div>
+
+          <div class="inlineNotice">
+            Identificação simulada para o protótipo. Nenhum dado é armazenado ou enviado.
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="identificationCancelButton" class="btn btnSecondary">CANCELAR</button>
+          <button id="identificationContinueButton" class="btn btnPrimary">CONTINUAR</button>
+        </div>
+      </div>
+
+      <div id="sessionPanel" class="panel">
+        <div class="panelHeader">
+          <h2>Charger 03</h2>
+          <div class="badge badgeGreen">DISPONÍVEL</div>
+        </div>
+
+        <div class="section">
+          <div class="sectionTitle">Cliente identificado</div>
+          <div class="statusBox">Cliente: <strong id="sessionCustomerName">Cliente Simulado</strong> • Veículo: EV 03</div>
+        </div>
+
+        <div class="section">
+          <div class="sectionTitle">Configuração da sessão</div>
+          <div class="infoGrid">
+            <div class="infoBox"><div class="infoLabel">Necessidade</div><div class="infoValue">80 km</div></div>
+            <div class="infoBox"><div class="infoLabel">Saída</div><div class="infoValue">18:00</div></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="sectionTitle">Estratégia</div>
+          <div class="option active" data-mode="economic">
+            <div><strong>Econômico</strong><small>Prioriza eficiência energética</small></div><span>●</span>
+          </div>
+          <div class="option" data-mode="fast">
+            <div><strong>Rápido</strong><small>Prioriza velocidade</small></div><span>●</span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="cancelSessionButton" class="btn btnSecondary">CANCELAR</button>
+          <button id="sessionContinueButton" class="btn btnPrimary">CONTINUAR</button>
+        </div>
+      </div>
+
+      <div id="paymentPanel" class="panel">
+        <div class="panelHeader">
+          <h2>Pagamento</h2>
+          <div class="badge badgeYellow">PENDENTE</div>
+        </div>
+
+        <div class="section">
+          <div class="sectionTitle">Resumo da recarga</div>
+          <div class="infoGrid">
+            <div class="infoBox"><div class="infoLabel">Carregador</div><div class="infoValue">Charger 03</div></div>
+            <div class="infoBox"><div class="infoLabel">Veículo</div><div class="infoValue">EV 03</div></div>
+            <div class="infoBox"><div class="infoLabel">Necessidade</div><div class="infoValue">80 km</div></div>
+            <div class="infoBox"><div class="infoLabel">Estratégia</div><div id="paymentMode" class="infoValue">Econômico</div></div>
+            <div class="infoBox"><div class="infoLabel">Energia estimada</div><div id="paymentEnergy" class="infoValue">20 kWh</div></div>
+            <div class="infoBox"><div class="infoLabel">Tarifa simulada</div><div id="paymentTariff" class="infoValue">R$ 1,50/kWh</div></div>
+          </div>
+
+          <div class="priceHero">
+            <div><span>Total estimado</span><strong id="paymentTotal">R$ 30,00</strong></div>
+            <div class="pitchTag">DADOS SIMULADOS • SPRINT 3</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="sectionTitle">Forma de pagamento</div>
+          <div class="paymentMethods">
+            <button class="paymentMethod active" type="button" data-payment-method="pix" data-payment-label="PIX / QR Code">
+              <span class="paymentMethodIcon">◆</span>
+              <strong>PIX / QR Code</strong>
+              <small>Pagamento instantâneo por leitura do QR.</small>
+            </button>
+            <button class="paymentMethod" type="button" data-payment-method="credit" data-payment-label="Cartão de crédito">
+              <span class="paymentMethodIcon">💳</span>
+              <strong>Crédito</strong>
+              <small>Cartão por aproximação ou inserção.</small>
+            </button>
+            <button class="paymentMethod" type="button" data-payment-method="debit" data-payment-label="Cartão de débito">
+              <span class="paymentMethodIcon">◉</span>
+              <strong>Débito / NFC</strong>
+              <small>Pagamento por aproximação.</small>
+            </button>
+          </div>
+          <div class="statusBox">Selecionado: <strong id="selectedPaymentMethod">PIX / QR Code</strong></div>
+        </div>
+
+        <div class="actions">
+          <button id="paymentBackButton" class="btn btnSecondary">VOLTAR</button>
+          <button id="payButton" class="btn btnSuccess">PAGAR <span id="payButtonTotal">R$ 30,00</span></button>
+        </div>
+      </div>
+
+      <div id="processingPanel" class="panel">
+        <div class="processing">
+          <div class="spinner"></div>
+          <h3 id="processingTitle">Processando...</h3>
+          <p id="processingText">Aguarde.</p>
+        </div>
+      </div>
+
+      <div id="paymentApprovedPanel" class="panel">
+        <div class="result">
+          <div class="resultIcon green">✓</div>
+          <h3>Pagamento aprovado</h3>
+          <p>A sessão foi autorizada.<br><strong id="approvedPaymentInfo">R$ 30,00 • PIX / QR Code</strong><br>Agora observe a liberação física da trava do conector.</p>
+          <div class="lockStatusBox">
+            <span>Estado da trava</span>
+            <strong>🔴 TRAVADA</strong>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="unlockButton" class="btn btnSuccess">LIBERAR CARREGADOR</button>
+        </div>
+      </div>
+
+      <div id="unlockedPanel" class="panel">
+        <div class="result">
+          <div class="resultIcon cyan">✓</div>
+          <h3>Trava liberada</h3>
+          <p>O pino de segurança foi recolhido e o conector está disponível.</p>
+          <div class="lockStatusBox unlocked">
+            <span>Estado da trava</span>
+            <strong>🟢 DESTRAVADA</strong>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="unlockReturnButton" class="btn btnPrimary">VOLTAR AO ELETROPOSTO</button>
+        </div>
+      </div>
+
+      <div id="connectorAvailablePanel" class="panel">
+        <div class="result">
+          <div class="resultIcon yellow">🔌</div>
+          <h3>Conector disponível</h3>
+          <p>Retire o conector do suporte do Charger 03.</p>
+        </div>
+        <div class="actions">
+          <button id="takeConnectorButton" class="btn btnWarning">RETIRAR CONECTOR</button>
+        </div>
+      </div>
+
+      <div id="connectorReleasedPanel" class="panel">
+        <div class="result">
+          <div class="resultIcon yellow">🔌</div>
+          <h3>Conector em mãos</h3>
+          <p>Agora conecte o cabo à porta de carga do EV 03.</p>
+        </div>
+        <div class="actions">
+          <button id="connectVehicleButton" class="btn btnSuccess">CONECTAR AO EV 03</button>
+        </div>
+      </div>
+
+      <div id="connectedPanel" class="panel">
+        <div class="result">
+          <div class="resultIcon green">✓</div>
+          <h3>EV 03 conectado</h3>
+          <p>O veículo está conectado ao Charger 03.</p>
+        </div>
+
+        <div class="section">
+          <div class="infoGrid">
+            <div class="infoBox"><div class="infoLabel">Limite da rede</div><div id="connectedLimit" class="infoValue">35 kW</div></div>
+            <div class="infoBox"><div class="infoLabel">Potência disponível p/ EVs</div><div id="connectedAvailable" class="infoValue">0 kW</div></div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="startChargingButton" class="btn btnPrimary">INICIAR CARREGAMENTO</button>
+        </div>
+      </div>
+
+      <div id="chargingPanel" class="panel">
+        <div class="chargingHero">
+          <div class="resultIcon green">⚡</div>
+          <div>
+            <h3>Carregamento ativo</h3>
+            <p>EV 03 conectado • Energy Engine gerenciando geração, armazenamento, rede e potência dos veículos.</p>
+          </div>
+        </div>
+
+        <div class="chargingColumns">
+          <div class="section">
+            <div class="sectionTitle">Distribuição inteligente</div>
+            <div class="infoGrid">
+              <div class="infoBox"><div class="infoLabel">EV 01</div><div id="panelEV01" class="infoValue">0 kW</div></div>
+              <div class="infoBox"><div class="infoLabel">EV 02</div><div id="panelEV02" class="infoValue">0 kW</div></div>
+              <div class="infoBox"><div class="infoLabel">EV 03</div><div id="panelEV03" class="infoValue">0 kW</div></div>
+              <div class="infoBox"><div class="infoLabel">Total EVs</div><div id="panelTotal" class="infoValue">0 kW</div></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="sectionTitle">Fontes e balanço energético</div>
+            <div class="infoGrid">
+              <div class="infoBox"><div class="infoLabel">Solar</div><div id="panelSolar" class="infoValue">0 kW</div></div>
+              <div class="infoBox"><div class="infoLabel">Rede</div><div id="panelGrid" class="infoValue">0 kW</div></div>
+              <div class="infoBox"><div class="infoLabel">Bateria</div><div id="panelBattery" class="infoValue">72%</div></div>
+              <div class="infoBox"><div class="infoLabel">Renovável</div><div id="panelRenewable" class="infoValue">0%</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chargingSessionStrip">
+          <div class="infoBox"><div class="infoLabel">Tempo simulado</div><div id="panelSessionTime" class="infoValue">00:00</div></div>
+          <div class="infoBox"><div class="infoLabel">Energia EV 03</div><div id="panelSessionEnergy" class="infoValue">0.00 kWh</div></div>
+          <div class="infoBox"><div class="infoLabel">Custo atual</div><div id="panelSessionCost" class="infoValue">R$ 0,00</div></div>
+          <div class="infoBox"><div class="infoLabel">Automação</div><div id="panelAutomation" class="infoValue automationValue">Balanceamento ativo</div></div>
+        </div>
+
+        <div class="statusBox">⚡ Sessão funcional • Cálculo atualizado automaticamente • Simulação acelerada em 60×</div>
+        <div class="actions">
+          <button id="chargingReturnButton" class="btn btnSecondary">CONTINUAR EXPLORANDO</button>
+          <button id="endChargingButton" class="btn btnWarning">ENCERRAR SESSÃO</button>
+        </div>
+      </div>
+
+      <div id="sessionEndedPanel" class="panel">
+        <div class="result">
+          <div class="resultIcon cyan">■</div>
+          <h3>Sessão encerrada</h3>
+          <p>A entrega de energia foi interrompida antes do retorno do conector.</p>
+        </div>
+
+        <div class="section">
+          <div class="infoGrid">
+            <div class="infoBox"><div class="infoLabel">Potência EV 03</div><div class="infoValue">0 kW</div></div>
+            <div class="infoBox"><div class="infoLabel">Estado</div><div class="infoValue">Sem carga</div></div>
+            <div class="infoBox"><div class="infoLabel">Energia entregue</div><div id="endedSessionEnergy" class="infoValue">0.00 kWh</div></div>
+            <div class="infoBox"><div class="infoLabel">Custo simulado</div><div id="endedSessionCost" class="infoValue">R$ 0,00</div></div>
+            <div class="infoBox"><div class="infoLabel">Tempo simulado</div><div id="endedSessionTime" class="infoValue">00:00</div></div>
+            <div class="infoBox"><div class="infoLabel">Energia solar na sessão</div><div id="endedSolarShare" class="infoValue">0%</div></div>
+          </div>
+          <div class="statusBox">✓ Carregamento desligado • Agora é seguro devolver o conector.</div>
+        </div>
+
+        <div class="actions">
+          <button id="returnConnectorButton" class="btn btnPrimary">DEVOLVER CONECTOR</button>
+        </div>
+      </div>
+
+      <div id="completionPanel" class="panel">
+        <div class="result">
+          <div class="resultIcon green">✓</div>
+          <h3>Simulação concluída</h3>
+          <p>O ciclo funcional foi executado, incluindo balanceamento energético, encerramento da carga e devolução segura do conector.</p>
+        </div>
+
+        <div class="section">
+          <div class="sectionTitle">Fluxo funcional validado</div>
+          <div class="completionChecklist">
+            <div class="completionItem"><span>✓</span> Cliente identificado e sessão configurada</div>
+            <div class="completionItem"><span>✓</span> Pagamento <strong id="completionPaymentInfo">R$ 30,00 • PIX / QR Code</strong></div>
+            <div class="completionItem"><span>✓</span> Trava liberada somente após a autorização</div>
+            <div class="completionItem"><span>✓</span> Conector retirado e acoplado ao EV 03</div>
+            <div class="completionItem"><span>✓</span> Energy Engine distribuiu potência automaticamente entre os EVs</div>
+            <div class="completionItem"><span>✓</span> Sessão registrou tempo, kWh, custo e origem da energia</div>
+            <div class="completionItem"><span>✓</span> Carregamento encerrado em 0 kW</div>
+            <div class="completionItem"><span>✓</span> Conector devolvido ao Charger 03 e trava reativada</div>
+          </div>
+        </div>
+
+        <div class="statusBox">🔴 Conector no suporte • Trava reativada • Simulação pronta para reiniciar</div>
+        <div class="actions">
+          <button id="completionReturnButton" class="btn btnSecondary">CONTINUAR EXPLORANDO</button>
+          <button id="resetDemoButton" class="btn btnPrimary">REINICIAR SIMULAÇÃO</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+    import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
+    import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+    // ========================================================
+    // DOM
+    // ========================================================
+
+    const $ = id => document.getElementById(id);
+
+    const game = $("game");
+    const startScreen = $("startScreen");
+    const startButton = $("startButton");
+    const loading = $("loading");
+    const statusElement = $("status");
+    const stateChip = $("stateChip");
+    const lockChip = $("lockChip");
+    const demoChip = $("demoChip");
+    const objectiveChip = $("objectiveChip");
+    const objectiveText = $("objectiveText");
+    const objectiveProgressFill = $("objectiveProgressFill");
+    const milestoneToast = $("milestoneToast");
+    const milestoneIcon = $("milestoneIcon");
+    const milestoneTitle = $("milestoneTitle");
+    const milestoneText = $("milestoneText");
+    const interactPrompt = $("interactPrompt");
+    const interactionOverlay = $("interactionOverlay");
+    const energyHUD = $("energyHUD");
+
+    const barEV01 = $("barEV01");
+    const barEV02 = $("barEV02");
+    const barEV03 = $("barEV03");
+
+    const hudLimit = $("hudLimit");
+    const hudSolar = $("hudSolar");
+    const hudGrid = $("hudGrid");
+    const hudBattery = $("hudBattery");
+    const hudBuilding = $("hudBuilding");
+    const hudAvailable = $("hudAvailable");
+    const hudEV01 = $("hudEV01");
+    const hudEV02 = $("hudEV02");
+    const hudEV03 = $("hudEV03");
+    const hudTotal = $("hudTotal");
+    const hudSessionTime = $("hudSessionTime");
+    const hudSessionEnergy = $("hudSessionEnergy");
+    const hudSessionCost = $("hudSessionCost");
+    const hudRenewable = $("hudRenewable");
+
+    const connectedLimit = $("connectedLimit");
+    const connectedAvailable = $("connectedAvailable");
+
+    const panelEV01 = $("panelEV01");
+    const panelEV02 = $("panelEV02");
+    const panelEV03 = $("panelEV03");
+    const panelTotal = $("panelTotal");
+    const panelSolar = $("panelSolar");
+    const panelGrid = $("panelGrid");
+    const panelBattery = $("panelBattery");
+    const panelRenewable = $("panelRenewable");
+    const panelSessionTime = $("panelSessionTime");
+    const panelSessionEnergy = $("panelSessionEnergy");
+    const panelSessionCost = $("panelSessionCost");
+    const panelAutomation = $("panelAutomation");
+    const endedSessionEnergy = $("endedSessionEnergy");
+    const endedSessionCost = $("endedSessionCost");
+    const endedSessionTime = $("endedSessionTime");
+    const endedSolarShare = $("endedSolarShare");
+
+    const panels = {
+      identification: $("identificationPanel"),
+      session: $("sessionPanel"),
+      payment: $("paymentPanel"),
+      processing: $("processingPanel"),
+      paymentApproved: $("paymentApprovedPanel"),
+      unlocked: $("unlockedPanel"),
+      connectorAvailable: $("connectorAvailablePanel"),
+      connectorReleased: $("connectorReleasedPanel"),
+      connected: $("connectedPanel"),
+      charging: $("chargingPanel"),
+      sessionEnded: $("sessionEndedPanel"),
+      completion: $("completionPanel")
+    };
+
+    // ========================================================
+    // THREE.JS
+    // ========================================================
+
+    const scene = new THREE.Scene();
+
+    // V7.2: atmosfera de fim de tarde claro. O fog suaviza o limite da maquete
+    // e o fundo azulado aumenta a leitura dos volumes sem alterar a geometria.
+    scene.background = new THREE.Color(0x91b8d4);
+    scene.fog = new THREE.Fog(0x91b8d4, 52, 125);
+
+    const camera = new THREE.PerspectiveCamera(
+      70,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+
+    const PLAYER_HEIGHT = 1.70;
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance"
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.16;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    game.appendChild(renderer.domElement);
+
+    // Reflexos de estúdio discretos para metais, pintura dos carros e carregadores.
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+    const roomEnvironment = new RoomEnvironment();
+    const environmentRenderTarget = pmremGenerator.fromScene(roomEnvironment, 0.04);
+    scene.environment = environmentRenderTarget.texture;
+    roomEnvironment.dispose();
+    pmremGenerator.dispose();
+
+    // Luz ambiente clara + sol quente para uma aparência de fim de tarde.
+    const hemisphere = new THREE.HemisphereLight(0xdff2ff, 0x6d6558, 2.05);
+    scene.add(hemisphere);
+
+    const sunlight = new THREE.DirectionalLight(0xffe2b5, 3.65);
+    sunlight.position.set(14, 22, 7);
+    sunlight.castShadow = true;
+    sunlight.shadow.mapSize.set(2048, 2048);
+    sunlight.shadow.camera.near = 0.5;
+    sunlight.shadow.camera.far = 90;
+    sunlight.shadow.camera.left = -30;
+    sunlight.shadow.camera.right = 30;
+    sunlight.shadow.camera.top = 30;
+    sunlight.shadow.camera.bottom = -30;
+    sunlight.shadow.bias = -0.00035;
+    sunlight.shadow.normalBias = 0.025;
+    scene.add(sunlight);
+
+    const fill = new THREE.DirectionalLight(0xcfe7ff, 0.78);
+    fill.position.set(-18, 12, 18);
+    scene.add(fill);
+
+    const canopyFill = new THREE.HemisphereLight(0xf4fbff, 0x39414a, 0.72);
+    canopyFill.position.set(0, 5, 3);
+    scene.add(canopyFill);
+
+    const controls = new PointerLockControls(camera, document.body);
+
+    const player = {
+      velocity: new THREE.Vector3(),
+      direction: new THREE.Vector3(),
+      speed: 4.5,
+      runSpeed: 8,
+      jumpForce: 6.5,
+      gravity: 18,
+      onGround: true
+    };
+
+    const keys = {
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      run: false
+    };
+
+    const runtime = {
+      loaded: false,
+      uiOpen: false,
+      milestoneTimer: null
+    };
+
+    // ========================================================
+    // V8.1 SPRINT 3 - PROTÓTIPO FUNCIONAL DO ELETROPOSTO
+    // ========================================================
+
+    const STATES = Object.freeze({
+      AVAILABLE: "AVAILABLE",
+      IDENTIFICATION: "IDENTIFICATION",
+      SESSION_CONFIG: "SESSION_CONFIG",
+      PAYMENT_PENDING: "PAYMENT_PENDING",
+      PAYMENT_PROCESSING: "PAYMENT_PROCESSING",
+      PAYMENT_APPROVED: "PAYMENT_APPROVED",
+      UNLOCKING: "UNLOCKING",
+      UNLOCKED: "UNLOCKED",
+      CONNECTOR_RELEASED: "CONNECTOR_RELEASED",
+      CONNECTING: "CONNECTING",
+      CONNECTED: "CONNECTED",
+      CHARGING: "CHARGING",
+      DISTRIBUTING: "DISTRIBUTING",
+      SESSION_ENDING: "SESSION_ENDING",
+      SESSION_ENDED: "SESSION_ENDED",
+      RETURNING: "RETURNING",
+      COMPLETED: "COMPLETED"
+    });
+
+    const TRANSITIONS = {
+      [STATES.AVAILABLE]: [STATES.IDENTIFICATION],
+      [STATES.IDENTIFICATION]: [STATES.AVAILABLE, STATES.SESSION_CONFIG],
+      [STATES.SESSION_CONFIG]: [STATES.AVAILABLE, STATES.PAYMENT_PENDING],
+      [STATES.PAYMENT_PENDING]: [STATES.SESSION_CONFIG, STATES.PAYMENT_PROCESSING],
+      [STATES.PAYMENT_PROCESSING]: [STATES.PAYMENT_APPROVED],
+      [STATES.PAYMENT_APPROVED]: [STATES.UNLOCKING],
+      [STATES.UNLOCKING]: [STATES.UNLOCKED],
+      [STATES.UNLOCKED]: [STATES.CONNECTOR_RELEASED],
+      [STATES.CONNECTOR_RELEASED]: [STATES.CONNECTING],
+      [STATES.CONNECTING]: [STATES.CONNECTED],
+      [STATES.CONNECTED]: [STATES.CHARGING],
+      [STATES.CHARGING]: [STATES.DISTRIBUTING],
+      [STATES.DISTRIBUTING]: [STATES.SESSION_ENDING],
+      [STATES.SESSION_ENDING]: [STATES.SESSION_ENDED],
+      [STATES.SESSION_ENDED]: [STATES.RETURNING],
+      [STATES.RETURNING]: [STATES.COMPLETED],
+      [STATES.COMPLETED]: []
+    };
+
+    const session = {
+      state: STATES.AVAILABLE,
+      customerName: "Cliente Simulado",
+      mode: "economic",
+      needKm: 80,
+      departure: "18:00",
+      chargerId: "03",
+      vehicleId: "EV03",
+      paymentMethod: "pix"
+    };
+
+    const DEMO_PRICING = Object.freeze({
+      energyKwh: 20,
+      economic: Object.freeze({ tariffPerKwh: 1.50 }),
+      fast: Object.freeze({ tariffPerKwh: 1.80 })
+    });
+
+    const PAYMENT_LABELS = Object.freeze({
+      pix: "PIX / QR Code",
+      credit: "Cartão de crédito",
+      debit: "Cartão de débito"
+    });
+
+    const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+    function getDemoPrice() {
+      const tariff = session.mode === "fast"
+        ? DEMO_PRICING.fast.tariffPerKwh
+        : DEMO_PRICING.economic.tariffPerKwh;
+
+      return {
+        energyKwh: DEMO_PRICING.energyKwh,
+        tariff,
+        total: DEMO_PRICING.energyKwh * tariff
+      };
+    }
+
+    function updatePaymentSummary() {
+      const price = getDemoPrice();
+      const methodLabel = PAYMENT_LABELS[session.paymentMethod] || PAYMENT_LABELS.pix;
+
+      $("paymentEnergy").textContent = `${price.energyKwh} kWh`;
+      $("paymentTariff").textContent = `${brl.format(price.tariff)}/kWh`;
+      $("paymentTotal").textContent = brl.format(price.total);
+      $("payButtonTotal").textContent = brl.format(price.total);
+      $("selectedPaymentMethod").textContent = methodLabel;
+      $("approvedPaymentInfo").textContent = `${brl.format(price.total)} • ${methodLabel}`;
+      $("completionPaymentInfo").textContent = `${brl.format(price.total)} • ${methodLabel}`;
+    }
+
+    const ENERGY_CONFIG = Object.freeze({
+      simulationSpeed: 60, // 1 segundo real = 1 minuto simulado
+      gridMaxImportKw: 35,
+      buildingBaseKw: 32,
+      batteryCapacityKwh: 60,
+      batteryMaxDischargeKw: 12,
+      batteryMinSoc: 20,
+      initialBatterySoc: 72,
+      evRequestsKw: Object.freeze({
+        EV01: 18,
+        EV02: 12,
+        EV03_ECONOMIC: 20,
+        EV03_FAST: 28
+      })
+    });
+
+    const energyEngine = {
+      simulatedSeconds: 0,
+      batterySoc: ENERGY_CONFIG.initialBatterySoc,
+      sessionEnergyKwh: 0,
+      sessionSolarKwh: 0,
+      sessionGridKwh: 0,
+      sessionBatteryKwh: 0,
+      lastSnapshot: null,
+      accumulator: 0
+    };
+
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    function transitionTo(nextState, reason = "") {
+      if (session.state === nextState) return true;
+
+      const allowed = TRANSITIONS[session.state] || [];
+      if (!allowed.includes(nextState)) {
+        console.error(`Transição inválida: ${session.state} → ${nextState}`);
+        return false;
+      }
+
+      const previous = session.state;
+      session.state = nextState;
+
+      console.log(`[STATE] ${previous} → ${nextState}${reason ? ` | ${reason}` : ""}`);
+      syncStatePresentation();
+      return true;
+    }
+
+    function syncStatePresentation() {
+      const statusMap = {
+        [STATES.AVAILABLE]: "CHARGEGRID • ELETROPOSTO DISPONÍVEL",
+        [STATES.IDENTIFICATION]: "CHARGER 03 • IDENTIFICAÇÃO",
+        [STATES.SESSION_CONFIG]: "CHARGER 03 • CONFIGURAÇÃO",
+        [STATES.PAYMENT_PENDING]: "CHARGER 03 • PAGAMENTO PENDENTE",
+        [STATES.PAYMENT_PROCESSING]: "CHARGER 03 • PROCESSANDO PAGAMENTO",
+        [STATES.PAYMENT_APPROVED]: "CHARGER 03 • PAGAMENTO APROVADO",
+        [STATES.UNLOCKING]: "CHARGER 03 • LIBERANDO TRAVA",
+        [STATES.UNLOCKED]: "CHARGER 03 • TRAVA LIBERADA",
+        [STATES.CONNECTOR_RELEASED]: "CHARGER 03 • CONECTOR RETIRADO",
+        [STATES.CONNECTING]: "EV 03 • CONECTANDO",
+        [STATES.CONNECTED]: "EV 03 • CONECTADO",
+        [STATES.CHARGING]: "EV 03 • INICIANDO CARREGAMENTO",
+        [STATES.DISTRIBUTING]: "EV 03 • CARREGAMENTO ATIVO",
+        [STATES.SESSION_ENDING]: "EV 03 • ENCERRANDO CARREGAMENTO",
+        [STATES.SESSION_ENDED]: "EV 03 • SESSÃO ENCERRADA",
+        [STATES.RETURNING]: "CHARGER 03 • DEVOLVENDO CONECTOR",
+        [STATES.COMPLETED]: "CHARGEGRID • PROTÓTIPO FUNCIONAL CONCLUÍDA"
+      };
+
+      const objectiveMap = {
+        [STATES.AVAILABLE]: "OBJETIVO: Vá até o Charger 03 e pressione E.",
+        [STATES.IDENTIFICATION]: "OBJETIVO: Faça a identificação simulada do cliente.",
+        [STATES.SESSION_CONFIG]: "OBJETIVO: Configure a necessidade e a estratégia de carregamento.",
+        [STATES.PAYMENT_PENDING]: "OBJETIVO: Simule o pagamento para autorizar o conector.",
+        [STATES.PAYMENT_PROCESSING]: "OBJETIVO: Aguarde a aprovação simulada do pagamento.",
+        [STATES.PAYMENT_APPROVED]: "OBJETIVO: Libere a trava de segurança do Charger 03.",
+        [STATES.UNLOCKING]: "OBJETIVO: Observe o pino da trava sendo recolhido.",
+        [STATES.UNLOCKED]: "OBJETIVO: Volte ao eletroposto e retire o conector.",
+        [STATES.CONNECTOR_RELEASED]: "OBJETIVO: Conecte o cabo à porta de carga do EV 03.",
+        [STATES.CONNECTING]: "OBJETIVO: Aguarde o encaixe do conector no veículo.",
+        [STATES.CONNECTED]: "OBJETIVO: Inicie o carregamento do EV 03.",
+        [STATES.CHARGING]: "OBJETIVO: Inicializando o Energy Engine.",
+        [STATES.DISTRIBUTING]: "OBJETIVO: Encerre a sessão antes de devolver o conector.",
+        [STATES.SESSION_ENDING]: "OBJETIVO: Desligando a entrega de energia do EV 03.",
+        [STATES.SESSION_ENDED]: "OBJETIVO: Devolva o conector ao Charger 03.",
+        [STATES.RETURNING]: "OBJETIVO: Aguarde o retorno seguro do conector ao suporte.",
+        [STATES.COMPLETED]: "CICLO CONCLUÍDO ✓  Conector devolvido e trava reativada."
+      };
+
+      const stepMap = {
+        [STATES.AVAILABLE]: [1, "EXPLORAÇÃO"],
+        [STATES.IDENTIFICATION]: [2, "IDENTIFICAÇÃO"],
+        [STATES.SESSION_CONFIG]: [3, "CONFIGURAÇÃO"],
+        [STATES.PAYMENT_PENDING]: [4, "PAGAMENTO"],
+        [STATES.PAYMENT_PROCESSING]: [4, "PAGAMENTO"],
+        [STATES.PAYMENT_APPROVED]: [5, "TRAVA"],
+        [STATES.UNLOCKING]: [5, "TRAVA"],
+        [STATES.UNLOCKED]: [5, "TRAVA"],
+        [STATES.CONNECTOR_RELEASED]: [6, "CONEXÃO"],
+        [STATES.CONNECTING]: [6, "CONEXÃO"],
+        [STATES.CONNECTED]: [6, "CONEXÃO"],
+        [STATES.CHARGING]: [7, "CARREGAMENTO"],
+        [STATES.DISTRIBUTING]: [7, "CARREGAMENTO"],
+        [STATES.SESSION_ENDING]: [8, "ENCERRAMENTO"],
+        [STATES.SESSION_ENDED]: [8, "DEVOLUÇÃO"],
+        [STATES.RETURNING]: [8, "DEVOLUÇÃO"],
+        [STATES.COMPLETED]: [8, "CONCLUÍDO"]
+      };
+
+      const [stepNumber, stepLabel] = stepMap[session.state] || [1, "SIMULAÇÃO"];
+
+      statusElement.textContent = statusMap[session.state] || `CHARGEGRID • ${session.state}`;
+      stateChip.textContent = `ETAPA ${stepNumber}/8 • ${stepLabel}`;
+      objectiveText.textContent = objectiveMap[session.state] || "OBJETIVO: Explore o eletroposto.";
+      objectiveProgressFill.style.width = `${stepNumber / 8 * 100}%`;
+
+      lockChip.classList.remove("unlocking", "unlocked");
+      if (session.state === STATES.UNLOCKING) {
+        lockChip.textContent = "TRAVA: 🟡 LIBERANDO";
+        lockChip.classList.add("unlocking");
+      }
+      else if ([
+        STATES.UNLOCKED,
+        STATES.CONNECTOR_RELEASED,
+        STATES.CONNECTING,
+        STATES.CONNECTED,
+        STATES.CHARGING,
+        STATES.DISTRIBUTING,
+        STATES.SESSION_ENDING,
+        STATES.SESSION_ENDED,
+        STATES.RETURNING
+      ].includes(session.state)) {
+        lockChip.textContent = "TRAVA: 🟢 DESTRAVADA";
+        lockChip.classList.add("unlocked");
+      }
+      else {
+        lockChip.textContent = "TRAVA: 🔴 TRAVADA";
+      }
+
+      updateDashboardStateFromSession();
+    }
+
+    function showMilestone(title, message, tone = "cyan", duration = 1700, icon = "✓") {
+      if (runtime.milestoneTimer) {
+        clearTimeout(runtime.milestoneTimer);
+        runtime.milestoneTimer = null;
+      }
+
+      milestoneToast.className = `milestoneToast ${tone} show`;
+      milestoneIcon.textContent = icon;
+      milestoneTitle.textContent = title;
+      milestoneText.textContent = message;
+
+      runtime.milestoneTimer = setTimeout(() => {
+        milestoneToast.classList.remove("show");
+        runtime.milestoneTimer = null;
+      }, duration);
+    }
+
+    function hideMilestone() {
+      if (runtime.milestoneTimer) {
+        clearTimeout(runtime.milestoneTimer);
+        runtime.milestoneTimer = null;
+      }
+      milestoneToast.classList.remove("show");
+    }
+
+    // ========================================================
+    // 3D OBJECTS
+    // ========================================================
+
+    let model = null;
+    let charger03 = null;
+    let charger03Connector = null;
+    let vehicle03Port = null;
+    let dashboardScreen = null;
+    let dashboardPlane = null;
+    let charger03LedRed = null;
+    let charger03LedRing = null;
+    let charger03LockPin = null;
+    let mixer = null;
+    let animationClips = [];
+
+    let connectorInitialPosition = null;
+    let lockPinInitialPosition = null;
+
+    const collisionBoxes = [];
+    const PLAYER_RADIUS = 0.38;
+
+    const chargerBodies = { 1: null, 2: null, 3: null };
+    const chargerObjects = { 1: [], 2: [], 3: [] };
+    const vehiclePorts = { 1: null, 2: null, 3: null };
+
+    // V8.1: ativos energéticos criados via Three.js, mantendo o GLB original intacto.
+    let solarArrayGroup = null;
+    let batteryESSGroup = null;
+    let batteryLevelMesh = null;
+    let batteryStatusLight = null;
+    const solarCellMaterials = [];
+
+    // ========================================================
+    // DASHBOARD CANVAS
+    // ========================================================
+
+    const dashboardCanvas = document.createElement("canvas");
+    dashboardCanvas.width = 1200;
+    dashboardCanvas.height = 760;
+
+    const dashboardContext = dashboardCanvas.getContext("2d");
+    const dashboardTexture = new THREE.CanvasTexture(dashboardCanvas);
+
+    dashboardTexture.colorSpace = THREE.SRGBColorSpace;
+    dashboardTexture.flipY = true;
+    dashboardTexture.minFilter = THREE.LinearFilter;
+    dashboardTexture.magFilter = THREE.LinearFilter;
+    dashboardTexture.generateMipmaps = false;
+    dashboardTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+    const dashboardData = {
+      limit: ENERGY_CONFIG.gridMaxImportKw,
+      building: ENERGY_CONFIG.buildingBaseKw,
+      available: 0,
+      solar: 24,
+      grid: 0,
+      batterySoc: ENERGY_CONFIG.initialBatterySoc,
+      ev01: 0,
+      ev02: 0,
+      ev03: 0,
+      total: 0,
+      stateLabel: "READY",
+      stateColor: "#38c8ff",
+      pulse: 0
+    };
+
+    function updateDashboardStateFromSession() {
+      const map = {
+        [STATES.AVAILABLE]: ["READY", "#38c8ff"],
+        [STATES.IDENTIFICATION]: ["IDENTIFY", "#38c8ff"],
+        [STATES.SESSION_CONFIG]: ["SESSION", "#38c8ff"],
+        [STATES.PAYMENT_PENDING]: ["PAYMENT", "#ffc94a"],
+        [STATES.PAYMENT_PROCESSING]: ["PAYMENT", "#ffc94a"],
+        [STATES.PAYMENT_APPROVED]: ["AUTHORIZED", "#22d35c"],
+        [STATES.UNLOCKING]: ["UNLOCKING", "#ffc94a"],
+        [STATES.UNLOCKED]: ["UNLOCKED", "#22d35c"],
+        [STATES.CONNECTOR_RELEASED]: ["CONNECTOR", "#38c8ff"],
+        [STATES.CONNECTING]: ["CONNECTING", "#38c8ff"],
+        [STATES.CONNECTED]: ["CONNECTED", "#22d35c"],
+        [STATES.CHARGING]: ["STARTING", "#ffc94a"],
+        [STATES.DISTRIBUTING]: ["CHARGING", "#22d35c"],
+        [STATES.SESSION_ENDING]: ["STOPPING", "#ffc94a"],
+        [STATES.SESSION_ENDED]: ["0 KW", "#38c8ff"],
+        [STATES.RETURNING]: ["RETURNING", "#ffc94a"],
+        [STATES.COMPLETED]: ["COMPLETE", "#22d35c"]
+      };
+
+      const [label, color] = map[session.state] || [session.state, "#38c8ff"];
+      dashboardData.stateLabel = label;
+      dashboardData.stateColor = color;
+      drawDashboard();
+    }
+
+    function drawDashboard() {
+      const ctx = dashboardContext;
+      const w = dashboardCanvas.width;
+      const h = dashboardCanvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#04111f";
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = "#16415f";
+      ctx.lineWidth = 8;
+      ctx.strokeRect(8, 8, w - 16, h - 16);
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#eef5ff";
+      ctx.font = "bold 54px Arial";
+      ctx.fillText("CHARGEGRID", 55, 70);
+
+      ctx.fillStyle = "#38c8ff";
+      ctx.font = "bold 24px Arial";
+      ctx.fillText("ENERGY ENGINE / SPRINT 3", 58, 108);
+
+      ctx.strokeStyle = "#173c58";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(50, 132);
+      ctx.lineTo(w - 50, 132);
+      ctx.stroke();
+
+      drawMetricCard(55, 160, 320, 140, "SOLAR", `${Number(dashboardData.solar).toFixed(1)} kW`, "#22d35c");
+      drawMetricCard(395, 160, 320, 140, "GRID", `${Number(dashboardData.grid).toFixed(1)} kW`, "#38c8ff");
+      drawMetricCard(735, 160, 410, 140, "BATTERY", `${Number(dashboardData.batterySoc).toFixed(1)}%`, "#ffc94a");
+
+      ctx.fillStyle = "#a9b8ca";
+      ctx.font = "bold 22px Arial";
+      ctx.fillText("EV POWER DISTRIBUTION", 55, 345);
+
+      drawEVRow(405, "EV 01", dashboardData.ev01);
+      drawEVRow(490, "EV 02", dashboardData.ev02);
+      drawEVRow(575, "EV 03", dashboardData.ev03);
+
+      ctx.strokeStyle = "#173c58";
+      ctx.beginPath();
+      ctx.moveTo(55, 660);
+      ctx.lineTo(w - 55, 660);
+      ctx.stroke();
+
+      ctx.fillStyle = "#eef5ff";
+      ctx.font = "bold 28px Arial";
+      ctx.fillText("TOTAL", 55, 715);
+
+      ctx.fillStyle = "#22d35c";
+      ctx.font = "bold 32px Arial";
+      ctx.fillText(`${dashboardData.total} kW`, 180, 715);
+
+      let alpha = 1;
+      if (session.state === STATES.DISTRIBUTING) {
+        alpha = 0.75 + Math.sin(dashboardData.pulse * 0.12) * 0.20;
+      }
+
+      ctx.fillStyle = dashboardData.stateColor;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(820, 700, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      ctx.font = "bold 24px Arial";
+      ctx.fillText(dashboardData.stateLabel, 847, 709);
+
+      dashboardTexture.needsUpdate = true;
+    }
+
+    function drawMetricCard(x, y, width, height, label, value, accent) {
+      const ctx = dashboardContext;
+
+      ctx.fillStyle = "#071b2d";
+      ctx.fillRect(x, y, width, height);
+
+      ctx.strokeStyle = "#14344d";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, width, height);
+
+      ctx.fillStyle = "#a9b8ca";
+      ctx.font = "bold 18px Arial";
+      ctx.fillText(label, x + 20, y + 34);
+
+      ctx.fillStyle = accent;
+      ctx.font = "bold 40px Arial";
+      ctx.fillText(value, x + 20, y + 90);
+    }
+
+    function drawEVRow(y, label, value) {
+      const ctx = dashboardContext;
+
+      ctx.fillStyle = "#eef5ff";
+      ctx.font = "bold 22px Arial";
+      ctx.fillText(label, 55, y);
+
+      ctx.fillStyle = "#38c8ff";
+      ctx.fillText(`${value} kW`, 220, y);
+
+      ctx.fillStyle = "#0b2236";
+      ctx.fillRect(365, y - 22, 560, 26);
+
+      const percent = THREE.MathUtils.clamp(value / 15, 0, 1);
+      ctx.fillStyle = "#38c8ff";
+      ctx.fillRect(365, y - 22, 560 * percent, 26);
+    }
+
+    // ========================================================
+    // COLISÕES SIMPLES DA MAQUETE
+    // ========================================================
+
+    function buildCollisionMap() {
+      collisionBoxes.length = 0;
+
+      if (!model) {
+        console.warn("[COLLISION] Modelo ainda não carregado.");
+        return;
+      }
+
+      // Apenas elementos estruturais principais entram no mapa de colisão.
+      // Isso evita que LEDs, cabos ou peças pequenas bloqueiem o jogador.
+      const exactNames = new Set([
+        "Charger_01_Body",
+        "Charger_02_Body",
+        "Charger_03_Body",
+        "EV_01_Body",
+        "EV_02_Body",
+        "EV_03_Body",
+        "Dashboard_Frame",
+        "Dashboard_Support",
+        "Building"
+      ]);
+
+      const selectedNames = [];
+
+      model.updateMatrixWorld(true);
+
+      model.traverse(object => {
+        const isPillar = /pillar|column/i.test(object.name);
+        if (!exactNames.has(object.name) && !isPillar) return;
+
+        const box = new THREE.Box3().setFromObject(object);
+        if (box.isEmpty()) return;
+
+        box.expandByVector(
+          new THREE.Vector3(PLAYER_RADIUS, 0, PLAYER_RADIUS)
+        );
+
+        collisionBoxes.push({
+          name: object.name,
+          box
+        });
+
+        selectedNames.push(object.name);
+      });
+
+      // A Battery ESS é criada fora do GLB; adicionamos sua colisão separadamente.
+      if (batteryESSGroup) {
+        batteryESSGroup.updateMatrixWorld(true);
+        const batteryBox = new THREE.Box3().setFromObject(batteryESSGroup);
+        if (!batteryBox.isEmpty()) {
+          batteryBox.expandByVector(new THREE.Vector3(PLAYER_RADIUS, 0, PLAYER_RADIUS));
+          collisionBoxes.push({ name: "Sprint3_BatteryESS", box: batteryBox });
+          selectedNames.push("Sprint3_BatteryESS");
+        }
+      }
+
+      console.log(
+        `[COLLISION] ${collisionBoxes.length} volumes ativos.`,
+        selectedNames
+      );
+
+      if (collisionBoxes.length === 0) {
+        console.warn(
+          "[COLLISION] Nenhum volume foi criado. A maquete continuará navegável sem colisões."
+        );
+      }
+    }
+
+    function playerCollidesAt(position) {
+      if (!collisionBoxes.length) return false;
+
+      const playerBottom = 0.05;
+      const playerTop = PLAYER_HEIGHT;
+
+      return collisionBoxes.some(({ box }) => {
+        const verticalOverlap =
+          box.max.y >= playerBottom &&
+          box.min.y <= playerTop;
+
+        if (!verticalOverlap) return false;
+
+        return (
+          position.x >= box.min.x &&
+          position.x <= box.max.x &&
+          position.z >= box.min.z &&
+          position.z <= box.max.z
+        );
+      });
+    }
+
+    // ========================================================
+    // SPAWN ESTÁVEL
+    // ========================================================
+
+    function getStationCenter() {
+      const positions = [];
+
+      for (const number of [1, 2, 3]) {
+        const body = chargerBodies[number];
+        if (!body) continue;
+
+        const position = new THREE.Vector3();
+        body.getWorldPosition(position);
+        positions.push(position);
+      }
+
+      if (!positions.length) {
+        return new THREE.Vector3(0, PLAYER_HEIGHT, -3);
+      }
+
+      const center = new THREE.Vector3();
+      positions.forEach(position => center.add(position));
+      return center.divideScalar(positions.length);
+    }
+
+    function getStationFrontDirection() {
+      const stationCenter = getStationCenter();
+
+      if (dashboardScreen) {
+        const dashboardPosition = new THREE.Vector3();
+        dashboardScreen.getWorldPosition(dashboardPosition);
+
+        const direction = stationCenter.clone().sub(dashboardPosition);
+        direction.y = 0;
+
+        if (direction.lengthSq() > 0.001) return direction.normalize();
+      }
+
+      return new THREE.Vector3(0, 0, 1);
+    }
+
+    function setupSpawnView() {
+      model.updateMatrixWorld(true);
+
+      const center = getStationCenter();
+      const front = getStationFrontDirection();
+      const spawn = center.clone().add(front.clone().multiplyScalar(10));
+
+      camera.position.set(spawn.x, PLAYER_HEIGHT, spawn.z);
+      camera.lookAt(center.x, PLAYER_HEIGHT + 0.25, center.z);
+      camera.updateMatrixWorld(true);
+
+      console.log("Spawn configurado:");
+      console.log("Position:", camera.position);
+      console.log("Looking at:", center);
+      console.log("Front direction:", front);
+    }
+
+    // ========================================================
+    // DASHBOARD 3D ESTÁVEL
+    // ========================================================
+
+    function setupReactiveDashboard() {
+      dashboardScreen = model.getObjectByName("Dashboard_Screen");
+
+      if (!dashboardScreen || !dashboardScreen.isMesh) {
+        console.warn("Dashboard_Screen não encontrado.");
+        return;
+      }
+
+      dashboardScreen.geometry.computeBoundingBox();
+      const box = dashboardScreen.geometry.boundingBox;
+
+      if (!box) {
+        console.warn("BoundingBox do Dashboard não encontrada.");
+        return;
+      }
+
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+
+      const dimensions = { x: size.x, y: size.y, z: size.z };
+      const thinAxis = Object.keys(dimensions).reduce(
+        (smallest, axis) => dimensions[axis] < dimensions[smallest] ? axis : smallest,
+        "x"
+      );
+
+      let width = 1;
+      let height = 1;
+      const rotation = new THREE.Euler(0, 0, 0);
+
+      if (thinAxis === "z") {
+        width = size.x;
+        height = size.y;
+      }
+      else if (thinAxis === "y") {
+        width = size.x;
+        height = size.z;
+        rotation.x = Math.PI / 2;
+      }
+      else {
+        width = size.z;
+        height = size.y;
+        rotation.y = Math.PI / 2;
+      }
+
+      console.log("Dashboard geometry size:", size);
+      console.log("Dashboard thin axis:", thinAxis);
+
+      model.traverse(object => {
+        if (!object.name.startsWith("Dashboard_")) return;
+
+        const keep =
+          object.name === "Dashboard_Frame" ||
+          object.name === "Dashboard_Support" ||
+          object.name === "Dashboard_Screen";
+
+        if (!keep) object.visible = false;
+      });
+
+      dashboardScreen.material = new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        colorWrite: false
+      });
+
+      const planeGeometry = new THREE.PlaneGeometry(width * 0.96, height * 0.96);
+      const planeMaterial = new THREE.MeshBasicMaterial({
+        map: dashboardTexture,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+        depthTest: true,
+        depthWrite: false
+      });
+
+      dashboardPlane = new THREE.Mesh(planeGeometry, planeMaterial);
+      dashboardPlane.name = "Dashboard_WebScreen";
+      dashboardScreen.add(dashboardPlane);
+      dashboardPlane.position.copy(center);
+      dashboardPlane.rotation.copy(rotation);
+      dashboardPlane.renderOrder = 20;
+
+      model.updateMatrixWorld(true);
+      dashboardPlane.updateMatrixWorld(true);
+
+      const dashWorld = new THREE.Vector3();
+      dashboardPlane.getWorldPosition(dashWorld);
+
+      const stationCenter = getStationCenter();
+      const expected = stationCenter.clone().sub(dashWorld).normalize();
+
+      const quaternion = new THREE.Quaternion();
+      dashboardPlane.getWorldQuaternion(quaternion);
+
+      const normal = new THREE.Vector3(0, 0, 1)
+        .applyQuaternion(quaternion)
+        .normalize();
+
+      if (normal.dot(expected) < 0) {
+        dashboardPlane.rotateY(Math.PI);
+      }
+
+      dashboardPlane.updateMatrixWorld(true);
+      dashboardPlane.getWorldQuaternion(quaternion);
+
+      const worldUp = new THREE.Vector3(0, 1, 0)
+        .applyQuaternion(quaternion)
+        .normalize();
+
+      if (worldUp.dot(new THREE.Vector3(0, 1, 0)) < 0) {
+        dashboardPlane.rotateZ(Math.PI);
+      }
+
+      dashboardPlane.updateMatrixWorld(true);
+      drawDashboard();
+
+      console.log("Dashboard reativo criado com PlaneGeometry própria.");
+      console.log("Dashboard WebScreen:", dashboardPlane);
+    }
+
+    updatePaymentSummary();
+
+    // ========================================================
+    // V7.2 VISUAL POLISH
+    // ========================================================
+
+    const visualTextures = {};
+    const presentationLights = [];
+
+    function createProceduralSurfaceTexture(kind) {
+      const size = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+
+      const isAsphalt = kind === "asphalt";
+      const base = isAsphalt ? 58 : 178;
+      const variation = isAsphalt ? 24 : 18;
+      const image = ctx.createImageData(size, size);
+
+      for (let i = 0; i < image.data.length; i += 4) {
+        const noise = (Math.random() - 0.5) * variation;
+        const value = Math.max(0, Math.min(255, base + noise));
+        image.data[i] = value;
+        image.data[i + 1] = value + (isAsphalt ? 1 : 2);
+        image.data[i + 2] = value + (isAsphalt ? 3 : 4);
+        image.data[i + 3] = 255;
+      }
+      ctx.putImageData(image, 0, 0);
+
+      if (!isAsphalt) {
+        ctx.strokeStyle = "rgba(110,118,124,.18)";
+        ctx.lineWidth = 1;
+        const step = 64;
+        for (let p = 0; p <= size; p += step) {
+          ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, size); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
+        }
+      } else {
+        for (let n = 0; n < 480; n++) {
+          const v = 70 + Math.random() * 60;
+          ctx.fillStyle = `rgba(${v},${v},${v},${0.08 + Math.random() * 0.12})`;
+          const r = Math.random() * 1.4 + 0.25;
+          ctx.beginPath();
+          ctx.arc(Math.random() * size, Math.random() * size, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(isAsphalt ? 12 : 7, isAsphalt ? 12 : 7);
+      texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    function materialList(object) {
+      if (!object?.material) return [];
+      return Array.isArray(object.material) ? object.material : [object.material];
+    }
+
+    function applyVisualPolish(root) {
+      visualTextures.asphalt ||= createProceduralSurfaceTexture("asphalt");
+      visualTextures.concrete ||= createProceduralSurfaceTexture("concrete");
+
+      let asphaltMeshes = 0;
+      let concreteMeshes = 0;
+      let refinedMaterials = 0;
+
+      root.traverse(object => {
+        if (!object.isMesh) return;
+
+        const name = object.name.toLowerCase();
+        const isAsphalt = name.includes("asphalt") || name.includes("drivelane") || name === "ground";
+        const isConcrete = name.includes("sidewalk") || name.includes("curb") || name.includes("pavement");
+        const isChargerBody = name.includes("charger_") && name.includes("body");
+        const isVehicleBody = (name.includes("ev_") || name.includes("vehicle") || name.includes("car")) && name.includes("body");
+        const isMetalStructure = name.includes("canopy") || name.includes("pillar") || name.includes("support");
+        const shouldPolish = isAsphalt || isConcrete || isChargerBody || isVehicleBody || isMetalStructure;
+
+        // Clona apenas materiais que serão alterados, evitando que um material compartilhado
+        // modifique acidentalmente outro objeto da maquete.
+        if (shouldPolish && object.material && !object.userData.visualPolishMaterialCloned) {
+          object.material = Array.isArray(object.material)
+            ? object.material.map(material => material?.clone?.() || material)
+            : object.material.clone?.() || object.material;
+          object.userData.visualPolishMaterialCloned = true;
+        }
+
+        const mats = materialList(object);
+
+        for (const material of mats) {
+          if (!material) continue;
+
+          // Mantém materiais especiais/transparentes intactos; apenas melhora sua resposta à luz.
+          if ("envMapIntensity" in material) material.envMapIntensity = Math.max(material.envMapIntensity || 0, 0.85);
+
+          if (isAsphalt && "roughness" in material) {
+            material.map = visualTextures.asphalt;
+            material.color?.set?.(0xffffff);
+            material.roughness = 0.94;
+            if ("metalness" in material) material.metalness = 0.0;
+            material.needsUpdate = true;
+            asphaltMeshes++;
+          } else if (isConcrete && "roughness" in material) {
+            material.map = visualTextures.concrete;
+            material.color?.set?.(0xffffff);
+            material.roughness = 0.86;
+            if ("metalness" in material) material.metalness = 0.0;
+            material.needsUpdate = true;
+            concreteMeshes++;
+          } else if (isChargerBody && "roughness" in material) {
+            material.roughness = Math.min(material.roughness ?? 0.5, 0.38);
+            if ("metalness" in material) material.metalness = Math.max(material.metalness ?? 0, 0.06);
+            if ("envMapIntensity" in material) material.envMapIntensity = 1.15;
+            material.needsUpdate = true;
+            refinedMaterials++;
+          } else if (isVehicleBody && "roughness" in material) {
+            material.roughness = Math.min(material.roughness ?? 0.5, 0.32);
+            if ("metalness" in material) material.metalness = Math.max(material.metalness ?? 0, 0.12);
+            if ("envMapIntensity" in material) material.envMapIntensity = 1.25;
+            material.needsUpdate = true;
+            refinedMaterials++;
+          } else if (isMetalStructure && "roughness" in material) {
+            material.roughness = Math.min(Math.max(material.roughness ?? 0.5, 0.38), 0.62);
+            if ("metalness" in material) material.metalness = Math.max(material.metalness ?? 0, 0.25);
+            if ("envMapIntensity" in material) material.envMapIntensity = 1.0;
+            material.needsUpdate = true;
+            refinedMaterials++;
+          }
+        }
+      });
+
+      console.log(`[VISUAL] Superfícies: ${asphaltMeshes} asfalto/rua, ${concreteMeshes} concreto/calçada.`);
+      console.log(`[VISUAL] Materiais refinados: ${refinedMaterials}.`);
+    }
+
+    function addPresentationLights() {
+      // Luminárias locais sobre os três carregadores. Elas iluminam o interior da cobertura
+      // e destacam o Charger 03 sem interferir nas colisões ou na lógica do protótipo.
+      for (let i = 1; i <= 3; i++) {
+        const body = chargerBodies[i];
+        if (!body) continue;
+
+        const targetPos = body.getWorldPosition(new THREE.Vector3());
+        const light = new THREE.PointLight(0xeaf8ff, i === 3 ? 20 : 13, 10, 2);
+        light.position.copy(targetPos);
+        light.position.y += 3.6;
+        light.castShadow = false;
+        scene.add(light);
+        presentationLights.push(light);
+      }
+
+      console.log(`[VISUAL] ${presentationLights.length} luminárias de cobertura adicionadas.`);
+    }
+
+    // ========================================================
+    // V8.1 - ATIVOS ENERGÉTICOS VISUAIS (THREE.JS)
+    // ========================================================
+
+    function createLabelTexture(title, subtitle, accent = "#38c8ff") {
+      const canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 180;
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = "#061525";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 8;
+      ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+
+      ctx.fillStyle = "#eef5ff";
+      ctx.font = "bold 42px Arial";
+      ctx.fillText(title, 28, 72);
+      ctx.fillStyle = accent;
+      ctx.font = "bold 24px Arial";
+      ctx.fillText(subtitle, 28, 120);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      return texture;
+    }
+
+    function createSprint3EnergyAssets() {
+      if (!model || solarArrayGroup || batteryESSGroup) return;
+
+      const canopy = model.getObjectByName("Canopy");
+      const building = model.getObjectByName("Building");
+
+      // ---------- ARRANJO FOTOVOLTAICO ----------
+      solarArrayGroup = new THREE.Group();
+      solarArrayGroup.name = "Sprint3_SolarArray";
+      scene.add(solarArrayGroup);
+
+      let canopyCenter = new THREE.Vector3(0, 6.2, -2);
+      let canopyTop = 6.48;
+      if (canopy) {
+        const canopyBox = new THREE.Box3().setFromObject(canopy);
+        canopyBox.getCenter(canopyCenter);
+        canopyTop = canopyBox.max.y;
+      }
+
+      const panelWidth = 3.15;
+      const panelDepth = 2.05;
+      const panelThickness = 0.09;
+      const panelGeometry = new THREE.BoxGeometry(panelWidth, panelThickness, panelDepth);
+      const frameGeometry = new THREE.BoxGeometry(panelWidth + 0.10, panelThickness * 0.55, panelDepth + 0.10);
+
+      const rows = 2;
+      const columns = 6;
+      const spacingX = 3.55;
+      const spacingZ = 2.45;
+      const startX = -((columns - 1) * spacingX) / 2;
+      const startZ = -((rows - 1) * spacingZ) / 2;
+
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < columns; col++) {
+          const module = new THREE.Group();
+          const frameMaterial = new THREE.MeshStandardMaterial({
+            color: 0x26333f,
+            roughness: 0.34,
+            metalness: 0.72
+          });
+          const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+          frame.position.y = -0.035;
+          frame.castShadow = true;
+          frame.receiveShadow = true;
+          module.add(frame);
+
+          const cellMaterial = new THREE.MeshStandardMaterial({
+            color: 0x0a3159,
+            roughness: 0.23,
+            metalness: 0.42,
+            emissive: new THREE.Color(0x00172b),
+            emissiveIntensity: 0.35
+          });
+          solarCellMaterials.push(cellMaterial);
+          const cells = new THREE.Mesh(panelGeometry, cellMaterial);
+          cells.castShadow = true;
+          cells.receiveShadow = true;
+          module.add(cells);
+
+          // Linhas metálicas sobre o módulo deixam a leitura visual mais claramente fotovoltaica.
+          const lineMaterial = new THREE.MeshBasicMaterial({ color: 0x8bc8e8, transparent: true, opacity: 0.38 });
+          for (let i = -2; i <= 2; i++) {
+            const line = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.012, panelDepth * 0.92), lineMaterial);
+            line.position.set(i * panelWidth / 5, 0.055, 0);
+            module.add(line);
+          }
+          for (let i = -1; i <= 1; i++) {
+            const line = new THREE.Mesh(new THREE.BoxGeometry(panelWidth * 0.94, 0.012, 0.018), lineMaterial);
+            line.position.set(0, 0.056, i * panelDepth / 3);
+            module.add(line);
+          }
+
+          module.position.set(
+            canopyCenter.x + startX + col * spacingX,
+            canopyTop + 0.22,
+            canopyCenter.z + startZ + row * spacingZ
+          );
+          module.rotation.x = THREE.MathUtils.degToRad(-7);
+          solarArrayGroup.add(module);
+        }
+      }
+
+      // ---------- BATERIA / ESS ----------
+      batteryESSGroup = new THREE.Group();
+      batteryESSGroup.name = "Sprint3_BatteryESS";
+      scene.add(batteryESSGroup);
+
+      let buildingBox = null;
+      if (building) buildingBox = new THREE.Box3().setFromObject(building);
+
+      const batteryPosition = buildingBox
+        ? new THREE.Vector3(buildingBox.min.x - 0.75, 1.15, buildingBox.min.z + 1.15)
+        : new THREE.Vector3(8.2, 1.15, -5.3);
+
+      const cabinet = new THREE.Mesh(
+        new THREE.BoxGeometry(1.2, 2.3, 0.82),
+        new THREE.MeshStandardMaterial({ color: 0x17232e, roughness: 0.36, metalness: 0.56 })
+      );
+      cabinet.castShadow = true;
+      cabinet.receiveShadow = true;
+      batteryESSGroup.add(cabinet);
+
+      const inset = new THREE.Mesh(
+        new THREE.BoxGeometry(0.78, 1.20, 0.03),
+        new THREE.MeshStandardMaterial({ color: 0x07131e, roughness: 0.45, metalness: 0.15 })
+      );
+      inset.position.set(0, 0.08, 0.426);
+      batteryESSGroup.add(inset);
+
+      batteryLevelMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.56, 0.88, 0.045),
+        new THREE.MeshBasicMaterial({ color: 0x22d35c })
+      );
+      batteryLevelMesh.position.set(0, -0.06, 0.448);
+      batteryESSGroup.add(batteryLevelMesh);
+
+      const label = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.02, 0.36),
+        new THREE.MeshBasicMaterial({
+          map: createLabelTexture("BATTERY ESS", "60 kWh • SMART STORAGE", "#ffc94a"),
+          side: THREE.DoubleSide,
+          toneMapped: false
+        })
+      );
+      label.position.set(0, 0.77, 0.438);
+      batteryESSGroup.add(label);
+
+      batteryStatusLight = new THREE.Mesh(
+        new THREE.SphereGeometry(0.075, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0x22d35c })
+      );
+      batteryStatusLight.position.set(0.40, -0.83, 0.46);
+      batteryESSGroup.add(batteryStatusLight);
+
+      // Pés e base para leitura de equipamento físico.
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(1.36, 0.12, 0.98),
+        new THREE.MeshStandardMaterial({ color: 0x111820, roughness: 0.58, metalness: 0.45 })
+      );
+      base.position.y = -1.20;
+      batteryESSGroup.add(base);
+
+      batteryESSGroup.position.copy(batteryPosition);
+      batteryESSGroup.rotation.y = -Math.PI / 2;
+
+      updateEnergyAssetVisuals({
+        solarKw: dashboardData.solar,
+        batterySoc: dashboardData.batterySoc,
+        batteryKw: 0
+      });
+
+      console.log(`[ENERGY ASSETS] ${rows * columns} módulos solares adicionados via Three.js.`);
+      console.log("[ENERGY ASSETS] Battery ESS visual adicionada via Three.js.");
+    }
+
+    function updateEnergyAssetVisuals(snapshot) {
+      if (!snapshot) return;
+
+      const solarKw = Number(snapshot.solarGenerationKw ?? snapshot.solarKw ?? 0);
+      const solarRatio = THREE.MathUtils.clamp(solarKw / 30, 0, 1);
+      for (const material of solarCellMaterials) {
+        material.emissive.setHex(0x002a50);
+        material.emissiveIntensity = 0.25 + solarRatio * 0.75;
+      }
+
+      const soc = THREE.MathUtils.clamp(Number(snapshot.batterySoc) || 0, 0, 100);
+      if (batteryLevelMesh) {
+        const ratio = Math.max(0.04, soc / 100);
+        batteryLevelMesh.scale.y = ratio;
+        batteryLevelMesh.position.y = -0.50 + (0.88 * ratio) / 2;
+        const levelColor = soc <= 30 ? 0xff4e4e : soc <= 55 ? 0xffc94a : 0x22d35c;
+        batteryLevelMesh.material.color.setHex(levelColor);
+      }
+
+      if (batteryStatusLight) {
+        const batteryKw = Number(snapshot.batteryPowerKw ?? snapshot.batteryKw ?? 0);
+        // Amarelo = fornecendo energia; verde = estável/armazenada.
+        batteryStatusLight.material.color.setHex(batteryKw > 0.15 ? 0xffc94a : 0x22d35c);
+      }
+    }
+
+    // ========================================================
+    // LOAD GLB
+    // ========================================================
+
+    const loader = new GLTFLoader();
+
+    loader.load(
+      "./ChargeGrid_Web.glb",
+      gltf => {
+        model = gltf.scene;
+        scene.add(model);
+
+        animationClips = gltf.animations || [];
+        if (animationClips.length) {
+          mixer = new THREE.AnimationMixer(model);
+        }
+
+        model.traverse(object => {
+          if (object.isMesh) {
+            object.castShadow = true;
+            object.receiveShadow = true;
+
+            const materials = Array.isArray(object.material) ? object.material : [object.material];
+            for (const material of materials) {
+              if (!material) continue;
+              if (material.map) material.map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+              material.needsUpdate = true;
+            }
+          }
+          if (object.name === "Charger_01_Body") chargerBodies[1] = object;
+          if (object.name === "Charger_02_Body") chargerBodies[2] = object;
+
+          if (object.name === "Charger_03_Body") {
+            chargerBodies[3] = object;
+            charger03 = object;
+          }
+
+          if (object.name === "Charger_03_Connector") charger03Connector = object;
+          if (object.name === "EV_03_ChargePort") vehicle03Port = object;
+          if (object.name === "Charger_03_LED_RED") charger03LedRed = object;
+          if (object.name === "Charger_03_LED_RING") charger03LedRing = object;
+          if (object.name === "Charger_03_LockPin") charger03LockPin = object;
+
+          if (object.name.startsWith("Charger_01_")) chargerObjects[1].push(object);
+          if (object.name.startsWith("Charger_02_")) chargerObjects[2].push(object);
+          if (object.name.startsWith("Charger_03_")) chargerObjects[3].push(object);
+
+          if (object.name === "EV_01_ChargePort") vehiclePorts[1] = object;
+          if (object.name === "EV_02_ChargePort") vehiclePorts[2] = object;
+          if (object.name === "EV_03_ChargePort") vehiclePorts[3] = object;
+        });
+
+        model.updateMatrixWorld(true);
+        applyVisualPolish(model);
+        addPresentationLights();
+        setupReactiveDashboard();
+        createSprint3EnergyAssets();
+        model.updateMatrixWorld(true);
+
+        buildCollisionMap();
+
+        if (charger03Connector) connectorInitialPosition = charger03Connector.position.clone();
+        if (charger03LockPin) lockPinInitialPosition = charger03LockPin.position.clone();
+
+        setLockVisual("locked");
+        setupSpawnView();
+
+        runtime.loaded = true;
+        syncStatePresentation();
+
+        startButton.disabled = false;
+        startButton.textContent = "INICIAR PROTÓTIPO";
+
+        loading.textContent = "ChargeGrid carregado ✓";
+        setTimeout(() => loading.style.display = "none", 900);
+
+        console.log("================================");
+        console.log("CHARGEGRID V8.1 • SPRINT 3 • PROTÓTIPO FUNCIONAL");
+        console.log("Energy Engine: solar + rede + bateria + balanceamento automático");
+        console.log("GLB carregado.");
+        console.log("Estado inicial:", session.state);
+        console.log("Charger 03:", charger03);
+        console.log("Connector:", charger03Connector);
+        console.log("Vehicle Port:", vehicle03Port);
+        console.log("Dashboard:", dashboardScreen);
+        console.log("Animations:", animationClips.map(clip => clip.name));
+        console.log("================================");
+      },
+      xhr => {
+        if (xhr.total) {
+          loading.textContent = `Carregando: ${(xhr.loaded / xhr.total * 100).toFixed(0)}%`;
+        }
+      },
+      error => {
+        console.error("Erro ao carregar GLB:", error);
+        loading.textContent = "Erro ao carregar ChargeGrid.";
+      }
+    );
+
+    // ========================================================
+    // POINTER LOCK
+    // ========================================================
+
+    startButton.addEventListener("click", () => {
+      if (runtime.loaded) controls.lock();
+    });
+
+    controls.addEventListener("lock", () => {
+      startScreen.style.display = "none";
+    });
+
+    controls.addEventListener("unlock", () => {
+      if (!runtime.uiOpen) startScreen.style.display = "flex";
+    });
+
+    // ========================================================
+    // KEYBOARD
+    // ========================================================
+
+    document.addEventListener("keydown", event => {
+      switch (event.code) {
+        case "KeyW": keys.forward = true; break;
+        case "KeyS": keys.backward = true; break;
+        case "KeyA": keys.left = true; break;
+        case "KeyD": keys.right = true; break;
+        case "ShiftLeft":
+        case "ShiftRight": keys.run = true; break;
+
+        case "Space":
+          if (controls.isLocked && player.onGround && !runtime.uiOpen) {
+            player.velocity.y = player.jumpForce;
+            player.onGround = false;
+          }
+          break;
+
+        case "KeyE":
+          if (controls.isLocked && !runtime.uiOpen) {
+            tryInteract();
+          }
+          break;
+      }
+    });
+
+    document.addEventListener("keyup", event => {
+      switch (event.code) {
+        case "KeyW": keys.forward = false; break;
+        case "KeyS": keys.backward = false; break;
+        case "KeyA": keys.left = false; break;
+        case "KeyD": keys.right = false; break;
+        case "ShiftLeft":
+        case "ShiftRight": keys.run = false; break;
+      }
+    });
+
+    // ========================================================
+    // MOVEMENT
+    // ========================================================
+
+    function updateMovement(delta) {
+      if (!controls.isLocked || runtime.uiOpen) return;
+
+      player.direction.set(0, 0, 0);
+
+      if (keys.forward) player.direction.z -= 1;
+      if (keys.backward) player.direction.z += 1;
+      if (keys.left) player.direction.x -= 1;
+      if (keys.right) player.direction.x += 1;
+
+      if (player.direction.lengthSq() > 0) player.direction.normalize();
+
+      const speed = keys.run ? player.runSpeed : player.speed;
+      const beforeX = camera.position.x;
+      const beforeZ = camera.position.z;
+
+      controls.moveRight(player.direction.x * speed * delta);
+      controls.moveForward(-player.direction.z * speed * delta);
+
+      const movedX = camera.position.x;
+      const movedZ = camera.position.z;
+
+      if (playerCollidesAt(camera.position)) {
+        // Tenta deslizar pelo eixo X.
+        camera.position.set(movedX, camera.position.y, beforeZ);
+
+        if (playerCollidesAt(camera.position)) {
+          // Se X também colide, tenta somente Z.
+          camera.position.set(beforeX, camera.position.y, movedZ);
+
+          if (playerCollidesAt(camera.position)) {
+            // Sem passagem: volta à posição anterior.
+            camera.position.set(beforeX, camera.position.y, beforeZ);
+          }
+        }
+      }
+
+      player.velocity.y -= player.gravity * delta;
+      camera.position.y += player.velocity.y * delta;
+
+      if (camera.position.y <= PLAYER_HEIGHT) {
+        camera.position.y = PLAYER_HEIGHT;
+        player.velocity.y = 0;
+        player.onGround = true;
+      }
+
+      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -18, 18);
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -18, 18);
+    }
+
+    // ========================================================
+    // INTERAÇÃO
+    // ========================================================
+
+    function distanceTo(object) {
+      if (!object) return Infinity;
+
+      const position = new THREE.Vector3();
+      object.getWorldPosition(position);
+      return camera.position.distanceTo(position);
+    }
+
+    function updateInteractionPrompt() {
+      if (
+        !controls.isLocked ||
+        runtime.uiOpen ||
+        !charger03 ||
+        distanceTo(charger03) >= 3.5
+      ) {
+        interactPrompt.style.opacity = "0";
+        return;
+      }
+
+      const promptMap = {
+        [STATES.AVAILABLE]: "[E] Interagir com Charger 03",
+        [STATES.UNLOCKED]: "[E] Retirar conector",
+        [STATES.CONNECTOR_RELEASED]: "[E] Conectar ao EV 03",
+        [STATES.CONNECTED]: "[E] Iniciar carregamento",
+        [STATES.DISTRIBUTING]: "[E] Gerenciar sessão ativa",
+        [STATES.SESSION_ENDED]: "[E] Devolver conector",
+        [STATES.COMPLETED]: "[E] Ver resumo da sessão"
+      };
+
+      interactPrompt.textContent = promptMap[session.state] || "[E] Continuar sessão";
+      interactPrompt.style.opacity = "1";
+    }
+
+    function tryInteract() {
+      if (distanceTo(charger03) >= 3.5) return;
+      openInteraction();
+    }
+
+    function openInteraction() {
+      if (session.state === STATES.AVAILABLE) {
+        transitionTo(STATES.IDENTIFICATION, "Usuário iniciou o fluxo funcional do Charger 03");
+      }
+
+      runtime.uiOpen = true;
+      interactionOverlay.style.display = "flex";
+      controls.unlock();
+
+      if (session.state === STATES.IDENTIFICATION) showPanel("identification");
+      else if (session.state === STATES.SESSION_CONFIG) showPanel("session");
+      else if (session.state === STATES.PAYMENT_PENDING) showPanel("payment");
+      else if (session.state === STATES.PAYMENT_APPROVED) showPanel("paymentApproved");
+      else if (session.state === STATES.UNLOCKED) showPanel("connectorAvailable");
+      else if (session.state === STATES.CONNECTOR_RELEASED) showPanel("connectorReleased");
+      else if (session.state === STATES.CONNECTED) showPanel("connected");
+      else if (session.state === STATES.DISTRIBUTING) showPanel("charging");
+      else if (session.state === STATES.SESSION_ENDED) showPanel("sessionEnded");
+      else if (session.state === STATES.COMPLETED) showPanel("completion");
+      else showPanel("processing");
+    }
+
+    function closeInteraction() {
+      interactionOverlay.style.display = "none";
+      runtime.uiOpen = false;
+      interactPrompt.style.opacity = "0";
+      controls.lock();
+    }
+
+    function showPanel(name) {
+      Object.values(panels).forEach(panel => panel.style.display = "none");
+      $("interactionPanel").classList.toggle("chargingCompact", name === "charging");
+      panels[name].style.display = "block";
+    }
+
+    function showProcessing(title, text) {
+      $("processingTitle").textContent = title;
+      $("processingText").textContent = text;
+      showPanel("processing");
+    }
+
+    // ========================================================
+    // IDENTIFICAÇÃO SIMULADA
+    // ========================================================
+
+    $("identificationCancelButton").addEventListener("click", () => {
+      if (transitionTo(STATES.AVAILABLE, "Identificação cancelada")) {
+        closeInteraction();
+      }
+    });
+
+    $("identificationContinueButton").addEventListener("click", () => {
+      const name = $("customerName").value.trim();
+
+      if (!name) {
+        $("identificationError").style.display = "block";
+        return;
+      }
+
+      $("identificationError").style.display = "none";
+      session.customerName = name;
+      $("sessionCustomerName").textContent = name;
+
+      if (transitionTo(STATES.SESSION_CONFIG, "Cliente identificado na simulação")) {
+        showPanel("session");
+      }
+    });
+
+    // ========================================================
+    // CONFIGURAÇÃO DA SESSÃO
+    // ========================================================
+
+    document.querySelectorAll("[data-mode]").forEach(option => {
+      option.addEventListener("click", () => {
+        document.querySelectorAll("[data-mode]")
+          .forEach(item => item.classList.remove("active"));
+
+        option.classList.add("active");
+        session.mode = option.dataset.mode;
+        $("paymentMode").textContent = session.mode === "fast" ? "Rápido" : "Econômico";
+        updatePaymentSummary();
+      });
+    });
+
+    $("cancelSessionButton").addEventListener("click", () => {
+      if (transitionTo(STATES.AVAILABLE, "Sessão simulada cancelada")) {
+        closeInteraction();
+      }
+    });
+
+    $("sessionContinueButton").addEventListener("click", () => {
+      if (transitionTo(STATES.PAYMENT_PENDING, "Configuração concluída")) {
+        updatePaymentSummary();
+        showPanel("payment");
+      }
+    });
+
+    $("paymentBackButton").addEventListener("click", () => {
+      if (transitionTo(STATES.SESSION_CONFIG, "Retorno à configuração")) {
+        showPanel("session");
+      }
+    });
+
+    // ========================================================
+    // PAGAMENTO SIMULADO
+    // ========================================================
+
+    document.querySelectorAll("[data-payment-method]").forEach(option => {
+      option.addEventListener("click", () => {
+        document.querySelectorAll("[data-payment-method]")
+          .forEach(item => item.classList.remove("active"));
+
+        option.classList.add("active");
+        session.paymentMethod = option.dataset.paymentMethod;
+        updatePaymentSummary();
+      });
+    });
+
+    $("payButton").addEventListener("click", async () => {
+      if (!transitionTo(STATES.PAYMENT_PROCESSING, "Pagamento simulado iniciado")) return;
+
+      showProcessing(
+        "Processando pagamento...",
+        `Autorizando ${PAYMENT_LABELS[session.paymentMethod]} • ${brl.format(getDemoPrice().total)}.`
+      );
+
+      await sleep(1100);
+
+      if (transitionTo(STATES.PAYMENT_APPROVED, "Pagamento simulado aprovado")) {
+        updatePaymentSummary();
+        showMilestone(
+          "PAGAMENTO APROVADO",
+          "A trava de segurança do Charger 03 está autorizada para liberação.",
+          "success",
+          1800,
+          "✓"
+        );
+        showPanel("paymentApproved");
+      }
+    });
+
+    // ========================================================
+    // TRAVA DE SEGURANÇA
+    // ========================================================
+
+    $("unlockButton").addEventListener("click", async () => {
+      if (!transitionTo(STATES.UNLOCKING, "Liberação física da trava iniciada")) return;
+
+      setLockVisual("unlocking");
+
+      showMilestone(
+        "LIBERANDO TRAVA DE SEGURANÇA",
+        "Observe o pino físico do Charger 03 sendo recolhido.",
+        "warning",
+        1500,
+        "↧"
+      );
+
+      showProcessing(
+        "Liberando trava de segurança...",
+        "Observe o pino de segurança do Charger 03 sendo recolhido."
+      );
+
+      await playCharger03Unlock();
+      setLockVisual("unlocked");
+
+      if (transitionTo(STATES.UNLOCKED, "Trava física liberada")) {
+        showMilestone(
+          "TRAVA LIBERADA",
+          "O conector está disponível para retirada.",
+          "success",
+          1900,
+          "✓"
+        );
+        showPanel("unlocked");
+      }
+    });
+
+    $("unlockReturnButton").addEventListener("click", closeInteraction);
+
+    function playCharger03Unlock() {
+      return new Promise(resolve => {
+        if (!mixer) {
+          console.warn("AnimationMixer não disponível.");
+          setTimeout(resolve, 900);
+          return;
+        }
+
+        const clip = animationClips.find(
+          item => item.name === "Charger_03_LockPinAction.003"
+        );
+
+        if (!clip) {
+          console.warn("Clip da trava do Charger 03 não encontrado.");
+          setTimeout(resolve, 900);
+          return;
+        }
+
+        const action = mixer.clipAction(clip);
+        action.reset();
+        action.enabled = true;
+        action.clampWhenFinished = true;
+        action.setLoop(THREE.LoopOnce, 1);
+        action.play();
+
+        console.log("[TRAVA] Unlock animation:", clip.name);
+        setTimeout(resolve, Math.max(900, clip.duration * 1000 + 150));
+      });
+    }
+
+    function setLockVisual(state) {
+      let color = 0xff4e4e;
+      let intensity = 3.2;
+
+      if (state === "unlocking") {
+        color = 0xffc94a;
+        intensity = 4;
+      }
+      else if (state === "unlocked") {
+        color = 0x22d35c;
+        intensity = 4.5;
+      }
+
+      for (const object of chargerObjects[3]) {
+        if (object.name.includes("LED") || object.name.includes("Ring")) {
+          setObjectEmission(object, color, intensity);
+        }
+      }
+
+      if (charger03LedRed) setObjectEmission(charger03LedRed, color, intensity);
+      if (charger03LedRing) setObjectEmission(charger03LedRing, color, intensity);
+    }
+
+    // ========================================================
+    // RETIRADA DO CONECTOR
+    // ========================================================
+
+    $("takeConnectorButton").addEventListener("click", () => {
+      animateConnectorRelease();
+
+      if (transitionTo(STATES.CONNECTOR_RELEASED, "Conector retirado do suporte")) {
+        showPanel("connectorReleased");
+      }
+    });
+
+    function animateConnectorRelease() {
+      if (!charger03Connector) return;
+
+      const start = charger03Connector.position.clone();
+      const end = start.clone();
+      end.y -= 0.45;
+
+      animateObjectPosition(charger03Connector, start, end, 650);
+    }
+
+    // ========================================================
+    // CONEXÃO AO EV 03
+    // ========================================================
+
+    $("connectVehicleButton").addEventListener("click", async () => {
+      if (!transitionTo(STATES.CONNECTING, "Conector movendo para o EV 03")) return;
+
+      showProcessing(
+        "Conectando ao EV 03...",
+        "Movendo o conector até a porta de carga do veículo."
+      );
+
+      await animateConnectorToVehicle();
+
+      if (transitionTo(STATES.CONNECTED, "Conector acoplado ao EV 03")) {
+        showMilestone(
+          "EV 03 CONECTADO",
+          "O conector foi acoplado à porta de carga do veículo.",
+          "success",
+          1500,
+          "⚡"
+        );
+        showPanel("connected");
+      }
+    });
+
+    function animateConnectorToVehicle() {
+      return new Promise(resolve => {
+        if (!charger03Connector || !vehicle03Port) {
+          console.warn("Connector ou EV_03_ChargePort não encontrado.");
+          resolve();
+          return;
+        }
+
+        const targetWorld = new THREE.Vector3();
+        vehicle03Port.getWorldPosition(targetWorld);
+
+        const parent = charger03Connector.parent;
+        const targetLocal = parent.worldToLocal(targetWorld.clone());
+        const startLocal = charger03Connector.position.clone();
+
+        const startTime = performance.now();
+        const duration = 1200;
+
+        function step(now) {
+          const progress = Math.min((now - startTime) / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+
+          charger03Connector.position.lerpVectors(startLocal, targetLocal, eased);
+
+          if (progress < 1) requestAnimationFrame(step);
+          else {
+            console.log("[CONECTOR] Conector conectado ao EV 03.");
+            resolve();
+          }
+        }
+
+        requestAnimationFrame(step);
+      });
+    }
+
+    function animateObjectPosition(object, start, end, duration) {
+      const startTime = performance.now();
+
+      function step(now) {
+        const progress = Math.min((now - startTime) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+
+        object.position.lerpVectors(start, end, eased);
+        if (progress < 1) requestAnimationFrame(step);
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    // ========================================================
+    // DEMONSTRAÇÃO DE CARREGAMENTO
+    // ========================================================
+
+    $("startChargingButton").addEventListener("click", async () => {
+      if (!transitionTo(STATES.CHARGING, "Carregamento do EV 03 iniciado")) return;
+
+      showProcessing(
+        "Inicializando carregamento...",
+        "Preparando a representação visual da distribuição energética."
+      );
+
+      await sleep(650);
+      resetEnergyEngine();
+
+      if (transitionTo(STATES.DISTRIBUTING, "Energy Engine ativado com balanceamento automático")) {
+        applyEnergySnapshot(calculateEnergySnapshot(0));
+        showMilestone(
+          "CARREGAMENTO INICIADO",
+          "Energy Engine ativo • solar, rede e bateria sendo balanceados em tempo real.",
+          "success",
+          2200,
+          "⚡"
+        );
+        showPanel("charging");
+      }
+    });
+
+    $("chargingReturnButton").addEventListener("click", closeInteraction);
+
+    $("endChargingButton").addEventListener("click", async () => {
+      if (!transitionTo(STATES.SESSION_ENDING, "Usuário encerrou a sessão de carregamento")) return;
+
+      showProcessing(
+        "Encerrando sessão...",
+        "Interrompendo a entrega de energia antes da devolução do conector."
+      );
+
+      stopDemoEnergy();
+      await sleep(650);
+
+      if (transitionTo(STATES.SESSION_ENDED, "Potência do EV 03 reduzida para 0 kW")) {
+        showMilestone(
+          "CARREGAMENTO ENCERRADO",
+          "Potência em 0 kW. O conector pode ser devolvido com segurança.",
+          "success",
+          1900,
+          "■"
+        );
+        showPanel("sessionEnded");
+      }
+    });
+
+    $("returnConnectorButton").addEventListener("click", async () => {
+      if (!transitionTo(STATES.RETURNING, "Devolução do conector iniciada")) return;
+
+      showProcessing(
+        "Devolvendo conector...",
+        "Carregamento desligado • 0 kW. Reposicionando o conector no suporte do Charger 03."
+      );
+
+      await animateConnectorReturnToCharger();
+      await relockCharger03();
+
+      if (transitionTo(STATES.COMPLETED, "Conector devolvido e trava reativada")) {
+        updatePaymentSummary();
+        showMilestone(
+          "CICLO CONCLUÍDO",
+          "Conector devolvido ao Charger 03 e trava de segurança reativada.",
+          "success",
+          2200,
+          "✓"
+        );
+        showPanel("completion");
+      }
+    });
+
+    $("completionReturnButton").addEventListener("click", closeInteraction);
+    $("resetDemoButton").addEventListener("click", () => resetDemo(true));
+
+    function formatSimulatedTime(totalSeconds) {
+      const seconds = Math.max(0, Math.floor(totalSeconds));
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+
+      if (hours > 0) {
+        return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+      }
+
+      return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+
+    function resetEnergyEngine() {
+      energyEngine.simulatedSeconds = 0;
+      energyEngine.batterySoc = ENERGY_CONFIG.initialBatterySoc;
+      energyEngine.sessionEnergyKwh = 0;
+      energyEngine.sessionSolarKwh = 0;
+      energyEngine.sessionGridKwh = 0;
+      energyEngine.sessionBatteryKwh = 0;
+      energyEngine.lastSnapshot = null;
+      energyEngine.accumulator = 0;
+    }
+
+    function calculateEnergySnapshot(realDeltaSeconds = 0) {
+      const simulatedDelta = Math.max(0, realDeltaSeconds) * ENERGY_CONFIG.simulationSpeed;
+      energyEngine.simulatedSeconds += simulatedDelta;
+
+      const t = energyEngine.simulatedSeconds;
+      const solarGenerationKw = THREE.MathUtils.clamp(
+        24 + Math.sin(t / 180) * 4 + Math.sin(t / 53) * 1.5,
+        18,
+        30
+      );
+
+      const buildingLoadKw = THREE.MathUtils.clamp(
+        ENERGY_CONFIG.buildingBaseKw + Math.sin(t / 210 + 0.7) * 2.5 + Math.sin(t / 71) * 0.8,
+        28,
+        36
+      );
+
+      const ev03Request = session.mode === "fast"
+        ? ENERGY_CONFIG.evRequestsKw.EV03_FAST
+        : ENERGY_CONFIG.evRequestsKw.EV03_ECONOMIC;
+
+      const requests = {
+        EV01: ENERGY_CONFIG.evRequestsKw.EV01,
+        EV02: ENERGY_CONFIG.evRequestsKw.EV02,
+        EV03: ev03Request
+      };
+
+      const requestedTotalKw = requests.EV01 + requests.EV02 + requests.EV03;
+      const batteryCanDischarge = energyEngine.batterySoc > ENERGY_CONFIG.batteryMinSoc + 0.1;
+      const batteryAvailableKw = batteryCanDischarge ? ENERGY_CONFIG.batteryMaxDischargeKw : 0;
+
+      const availableForEVsKw = Math.max(
+        0,
+        solarGenerationKw + ENERGY_CONFIG.gridMaxImportKw + batteryAvailableKw - buildingLoadKw
+      );
+
+      const allocationFactor = Math.min(1, availableForEVsKw / requestedTotalKw);
+      const allocations = {
+        EV01: requests.EV01 * allocationFactor,
+        EV02: requests.EV02 * allocationFactor,
+        EV03: requests.EV03 * allocationFactor
+      };
+
+      const totalAllocatedKw = allocations.EV01 + allocations.EV02 + allocations.EV03;
+      const siteDemandKw = buildingLoadKw + totalAllocatedKw;
+
+      const batteryPowerKw = Math.min(
+        batteryAvailableKw,
+        Math.max(0, siteDemandKw - solarGenerationKw - ENERGY_CONFIG.gridMaxImportKw)
+      );
+
+      const gridImportKw = THREE.MathUtils.clamp(
+        siteDemandKw - solarGenerationKw - batteryPowerKw,
+        0,
+        ENERGY_CONFIG.gridMaxImportKw
+      );
+
+      const solarUsedKw = Math.min(solarGenerationKw, siteDemandKw);
+      const sourceTotalKw = Math.max(0.001, solarUsedKw + gridImportKw + batteryPowerKw);
+      const solarShare = solarUsedKw / sourceTotalKw;
+      const gridShare = gridImportKw / sourceTotalKw;
+      const batteryShare = batteryPowerKw / sourceTotalKw;
+
+      if (simulatedDelta > 0) {
+        const batteryEnergyKwh = batteryPowerKw * simulatedDelta / 3600;
+        energyEngine.batterySoc = Math.max(
+          ENERGY_CONFIG.batteryMinSoc,
+          energyEngine.batterySoc - (batteryEnergyKwh / ENERGY_CONFIG.batteryCapacityKwh * 100)
+        );
+
+        const deliveredKwh = allocations.EV03 * simulatedDelta / 3600;
+        energyEngine.sessionEnergyKwh += deliveredKwh;
+        energyEngine.sessionSolarKwh += deliveredKwh * solarShare;
+        energyEngine.sessionGridKwh += deliveredKwh * gridShare;
+        energyEngine.sessionBatteryKwh += deliveredKwh * batteryShare;
+      }
+
+      const price = getDemoPrice();
+      const sessionCost = energyEngine.sessionEnergyKwh * price.tariff;
+      const constrained = allocationFactor < 0.999;
+
+      const snapshot = {
+        gridLimitKw: ENERGY_CONFIG.gridMaxImportKw,
+        solarGenerationKw,
+        gridImportKw,
+        batteryPowerKw,
+        batterySoc: energyEngine.batterySoc,
+        buildingLoadKw,
+        availablePowerKw: availableForEVsKw,
+        requestedTotalKw,
+        allocationFactor,
+        constrained,
+        allocations,
+        totalAllocatedKw,
+        renewablePercent: solarShare * 100,
+        sessionEnergyKwh: energyEngine.sessionEnergyKwh,
+        sessionCost,
+        simulatedSeconds: energyEngine.simulatedSeconds
+      };
+
+      energyEngine.lastSnapshot = snapshot;
+      return snapshot;
+    }
+
+    function applyEnergySnapshot(snapshot) {
+      const oneDecimal = value => Number(value).toFixed(1);
+      const ev01 = snapshot.allocations.EV01;
+      const ev02 = snapshot.allocations.EV02;
+      const ev03 = snapshot.allocations.EV03;
+      const maxBarKw = Math.max(
+        1,
+        ENERGY_CONFIG.evRequestsKw.EV01,
+        ENERGY_CONFIG.evRequestsKw.EV02,
+        session.mode === "fast" ? ENERGY_CONFIG.evRequestsKw.EV03_FAST : ENERGY_CONFIG.evRequestsKw.EV03_ECONOMIC
+      );
+
+      dashboardData.limit = snapshot.gridLimitKw;
+      dashboardData.building = Math.round(snapshot.buildingLoadKw);
+      dashboardData.available = Math.round(snapshot.availablePowerKw);
+      dashboardData.solar = snapshot.solarGenerationKw;
+      dashboardData.grid = snapshot.gridImportKw;
+      dashboardData.batterySoc = snapshot.batterySoc;
+      dashboardData.ev01 = oneDecimal(ev01);
+      dashboardData.ev02 = oneDecimal(ev02);
+      dashboardData.ev03 = oneDecimal(ev03);
+      dashboardData.total = oneDecimal(snapshot.totalAllocatedKw);
+
+      hudLimit.textContent = `${oneDecimal(snapshot.gridLimitKw)} kW`;
+      hudSolar.textContent = `${oneDecimal(snapshot.solarGenerationKw)} kW`;
+      hudGrid.textContent = `${oneDecimal(snapshot.gridImportKw)} kW`;
+      hudBattery.textContent = `${oneDecimal(snapshot.batterySoc)}% • ${oneDecimal(snapshot.batteryPowerKw)} kW`;
+      hudBuilding.textContent = `${oneDecimal(snapshot.buildingLoadKw)} kW`;
+      hudAvailable.textContent = `${oneDecimal(snapshot.availablePowerKw)} kW`;
+      hudEV01.textContent = `${oneDecimal(ev01)} kW`;
+      hudEV02.textContent = `${oneDecimal(ev02)} kW`;
+      hudEV03.textContent = `${oneDecimal(ev03)} kW`;
+      hudTotal.textContent = `${oneDecimal(snapshot.totalAllocatedKw)} kW`;
+      hudSessionTime.textContent = formatSimulatedTime(snapshot.simulatedSeconds);
+      hudSessionEnergy.textContent = `${snapshot.sessionEnergyKwh.toFixed(2)} kWh`;
+      hudSessionCost.textContent = brl.format(snapshot.sessionCost);
+      hudRenewable.textContent = `${snapshot.renewablePercent.toFixed(0)}%`;
+
+      connectedLimit.textContent = `${oneDecimal(snapshot.gridLimitKw)} kW`;
+      connectedAvailable.textContent = `${oneDecimal(snapshot.availablePowerKw)} kW`;
+
+      panelEV01.textContent = `${oneDecimal(ev01)} kW`;
+      panelEV02.textContent = `${oneDecimal(ev02)} kW`;
+      panelEV03.textContent = `${oneDecimal(ev03)} kW`;
+      panelTotal.textContent = `${oneDecimal(snapshot.totalAllocatedKw)} kW`;
+      panelSolar.textContent = `${oneDecimal(snapshot.solarGenerationKw)} kW`;
+      panelGrid.textContent = `${oneDecimal(snapshot.gridImportKw)} kW`;
+      panelBattery.textContent = `${oneDecimal(snapshot.batterySoc)}% • ${oneDecimal(snapshot.batteryPowerKw)} kW`;
+      panelRenewable.textContent = `${snapshot.renewablePercent.toFixed(0)}%`;
+      panelSessionTime.textContent = formatSimulatedTime(snapshot.simulatedSeconds);
+      panelSessionEnergy.textContent = `${snapshot.sessionEnergyKwh.toFixed(2)} kWh`;
+      panelSessionCost.textContent = brl.format(snapshot.sessionCost);
+      panelAutomation.textContent = snapshot.constrained
+        ? `Balanceando ${Math.round(snapshot.allocationFactor * 100)}% da demanda`
+        : "Demanda atendida integralmente";
+
+      energyHUD.classList.add("active");
+      barEV01.style.width = `${Math.min(100, ev01 / maxBarKw * 100)}%`;
+      barEV02.style.width = `${Math.min(100, ev02 / maxBarKw * 100)}%`;
+      barEV03.style.width = `${Math.min(100, ev03 / maxBarKw * 100)}%`;
+
+      illuminateCharger(1);
+      illuminateCharger(2);
+      illuminateCharger(3);
+      illuminatePort(vehiclePorts[1]);
+      illuminatePort(vehiclePorts[2]);
+      illuminatePort(vehiclePorts[3]);
+
+      if (!energyEffectsActive) createEnergyPulses();
+      drawDashboard();
+      updateEnergyAssetVisuals(snapshot);
+    }
+
+    function updateEndedSessionSummary() {
+      const snapshot = energyEngine.lastSnapshot;
+      if (!snapshot) return;
+
+      const solarShare = energyEngine.sessionEnergyKwh > 0
+        ? energyEngine.sessionSolarKwh / energyEngine.sessionEnergyKwh * 100
+        : 0;
+
+      endedSessionEnergy.textContent = `${energyEngine.sessionEnergyKwh.toFixed(2)} kWh`;
+      endedSessionCost.textContent = brl.format(snapshot.sessionCost);
+      endedSessionTime.textContent = formatSimulatedTime(energyEngine.simulatedSeconds);
+      endedSolarShare.textContent = `${solarShare.toFixed(0)}%`;
+    }
+
+    function stopDemoEnergy() {
+      updateEndedSessionSummary();
+      stopEnergyPulses();
+      restoreEnergyVisuals();
+      setLockVisual("unlocked");
+
+      dashboardData.ev01 = 0;
+      dashboardData.ev02 = 0;
+      dashboardData.ev03 = 0;
+      dashboardData.total = 0;
+      dashboardData.pulse = 0;
+
+      hudEV01.textContent = "0 kW";
+      hudEV02.textContent = "0 kW";
+      hudEV03.textContent = "0 kW";
+      hudTotal.textContent = "0 kW";
+
+      panelEV01.textContent = "0 kW";
+      panelEV02.textContent = "0 kW";
+      panelEV03.textContent = "0 kW";
+      panelTotal.textContent = "0 kW";
+
+      barEV01.style.width = "0%";
+      barEV02.style.width = "0%";
+      barEV03.style.width = "0%";
+      energyHUD.classList.remove("active");
+      drawDashboard();
+      updateEnergyAssetVisuals({
+        solarGenerationKw: dashboardData.solar,
+        batterySoc: dashboardData.batterySoc,
+        batteryPowerKw: 0
+      });
+
+      console.log("[ENERGY ENGINE] Sessão encerrada com métricas consolidadas antes da devolução do conector.");
+    }
+
+    async function animateConnectorReturnToCharger() {
+      if (!charger03Connector || !connectorInitialPosition) {
+        console.warn("Conector ou posição inicial indisponível para devolução.");
+        return;
+      }
+
+      // Trajeto em três fases: afasta do EV, retorna acima do suporte e então encaixa.
+      // Nenhum efeito energético fica ativo durante esse movimento.
+      stopEnergyPulses();
+
+      const start = charger03Connector.position.clone();
+      const retreat = start.clone();
+      retreat.y += 0.28;
+
+      const homeAbove = connectorInitialPosition.clone();
+      homeAbove.y += 0.28;
+
+      await animateObjectPositionAsync(charger03Connector, start, retreat, 360);
+      await animateObjectPositionAsync(charger03Connector, retreat, homeAbove, 1050);
+      await animateObjectPositionAsync(charger03Connector, homeAbove, connectorInitialPosition.clone(), 480);
+
+      console.log("[CONECTOR] Conector devolvido ao suporte do Charger 03.");
+    }
+
+    async function relockCharger03() {
+      if (mixer) mixer.stopAllAction();
+
+      if (charger03LockPin && lockPinInitialPosition) {
+        const start = charger03LockPin.position.clone();
+        await animateObjectPositionAsync(charger03LockPin, start, lockPinInitialPosition.clone(), 520);
+      }
+
+      setLockVisual("locked");
+      console.log("[TRAVA] Charger 03 travado novamente após a devolução do conector.");
+    }
+
+    function animateObjectPositionAsync(object, start, end, duration) {
+      return new Promise(resolve => {
+        const startTime = performance.now();
+
+        function step(now) {
+          const progress = Math.min((now - startTime) / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          object.position.lerpVectors(start, end, eased);
+
+          if (progress < 1) requestAnimationFrame(step);
+          else resolve();
+        }
+
+        requestAnimationFrame(step);
+      });
+    }
+
+    // ========================================================
+    // RESET DA DEMONSTRAÇÃO
+    // ========================================================
+
+    function resetDemo(lockPointer = false) {
+      interactionOverlay.style.display = "none";
+      runtime.uiOpen = false;
+      hideMilestone();
+
+      session.state = STATES.AVAILABLE;
+      session.customerName = "Cliente Simulado";
+      session.mode = "economic";
+      session.paymentMethod = "pix";
+
+      $("customerName").value = session.customerName;
+      $("sessionCustomerName").textContent = session.customerName;
+      $("paymentMode").textContent = "Econômico";
+      document.querySelectorAll("[data-payment-method]").forEach(option => {
+        option.classList.toggle("active", option.dataset.paymentMethod === "pix");
+      });
+      updatePaymentSummary();
+      $("identificationError").style.display = "none";
+
+      document.querySelectorAll("[data-mode]").forEach(option => {
+        option.classList.toggle("active", option.dataset.mode === "economic");
+      });
+
+      if (mixer) {
+        mixer.stopAllAction();
+        mixer.setTime(0);
+      }
+
+      if (charger03LockPin && lockPinInitialPosition) {
+        charger03LockPin.position.copy(lockPinInitialPosition);
+      }
+
+      if (charger03Connector && connectorInitialPosition) {
+        charger03Connector.position.copy(connectorInitialPosition);
+      }
+
+      stopEnergyPulses();
+      restoreEnergyVisuals();
+      setLockVisual("locked");
+
+      resetEnergyEngine();
+
+      dashboardData.limit = ENERGY_CONFIG.gridMaxImportKw;
+      dashboardData.building = ENERGY_CONFIG.buildingBaseKw;
+      dashboardData.available = 0;
+      dashboardData.solar = 24;
+      dashboardData.grid = 0;
+      dashboardData.batterySoc = ENERGY_CONFIG.initialBatterySoc;
+      dashboardData.ev01 = 0;
+      dashboardData.ev02 = 0;
+      dashboardData.ev03 = 0;
+      dashboardData.total = 0;
+      dashboardData.pulse = 0;
+
+      hudLimit.textContent = `${ENERGY_CONFIG.gridMaxImportKw} kW`;
+      hudSolar.textContent = "0 kW";
+      hudGrid.textContent = "0 kW";
+      hudBattery.textContent = `${ENERGY_CONFIG.initialBatterySoc}% • 0 kW`;
+      hudBuilding.textContent = `${ENERGY_CONFIG.buildingBaseKw} kW`;
+      hudAvailable.textContent = "0 kW";
+      hudEV01.textContent = "0 kW";
+      hudEV02.textContent = "0 kW";
+      hudEV03.textContent = "0 kW";
+      hudTotal.textContent = "0 kW";
+      hudSessionTime.textContent = "00:00";
+      hudSessionEnergy.textContent = "0.00 kWh";
+      hudSessionCost.textContent = brl.format(0);
+      hudRenewable.textContent = "0%";
+
+      connectedLimit.textContent = `${ENERGY_CONFIG.gridMaxImportKw} kW`;
+      connectedAvailable.textContent = "0 kW";
+
+      panelEV01.textContent = "0 kW";
+      panelEV02.textContent = "0 kW";
+      panelEV03.textContent = "0 kW";
+      panelTotal.textContent = "0 kW";
+      panelSolar.textContent = "0 kW";
+      panelGrid.textContent = "0 kW";
+      panelBattery.textContent = `${ENERGY_CONFIG.initialBatterySoc}%`;
+      panelRenewable.textContent = "0%";
+      panelSessionTime.textContent = "00:00";
+      panelSessionEnergy.textContent = "0.00 kWh";
+      panelSessionCost.textContent = brl.format(0);
+      panelAutomation.textContent = "Balanceamento ativo";
+      endedSessionEnergy.textContent = "0.00 kWh";
+      endedSessionCost.textContent = brl.format(0);
+      endedSessionTime.textContent = "00:00";
+      endedSolarShare.textContent = "0%";
+
+      barEV01.style.width = "0%";
+      barEV02.style.width = "0%";
+      barEV03.style.width = "0%";
+      energyHUD.classList.remove("active");
+      updateEnergyAssetVisuals({
+        solarGenerationKw: dashboardData.solar,
+        batterySoc: dashboardData.batterySoc,
+        batteryPowerKw: 0
+      });
+
+      syncStatePresentation();
+      setupSpawnView();
+
+      console.log("[PROTOTYPE] Simulação reiniciada.");
+
+      if (lockPointer) controls.lock();
+    }
+
+    // ========================================================
+    // EMISSION
+    // ========================================================
+
+    function illuminateCharger(number) {
+      for (const object of chargerObjects[number]) {
+        if (!(object.name.includes("LED") || object.name.includes("Ring"))) continue;
+
+        // No Charger 03, o indicador da trava permanece verde após o unlock.
+        if (number === 3 && (object === charger03LedRed || object === charger03LedRing)) {
+          continue;
+        }
+
+        setObjectEmission(object, 0x38c8ff, 4);
+      }
+    }
+
+    function illuminatePort(object) {
+      if (object) setObjectEmission(object, 0x38c8ff, 4);
+    }
+
+    function setObjectEmission(object, color, intensity) {
+      if (!object || !object.material) return;
+
+      if (!object.userData.chargeGridMaterialCloned) {
+        const originalMaterials = Array.isArray(object.material)
+          ? object.material
+          : [object.material];
+
+        object.userData.chargeGridOriginalEmission = originalMaterials.map(material => ({
+          hasEmissive: "emissive" in material,
+          color: "emissive" in material ? material.emissive.getHex() : null,
+          intensity: "emissiveIntensity" in material ? material.emissiveIntensity : 1
+        }));
+
+        object.material = Array.isArray(object.material)
+          ? object.material.map(material => material.clone())
+          : object.material.clone();
+
+        object.userData.chargeGridMaterialCloned = true;
+      }
+
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+
+      for (const material of materials) {
+        if ("emissive" in material) {
+          material.emissive.set(color);
+          material.emissiveIntensity = intensity;
+          material.needsUpdate = true;
+        }
+      }
+    }
+
+    function restoreObjectEmission(object) {
+      if (!object || !object.material || !object.userData.chargeGridOriginalEmission) return;
+
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+
+      materials.forEach((material, index) => {
+        const original = object.userData.chargeGridOriginalEmission[index];
+        if (!original || !original.hasEmissive || !("emissive" in material)) return;
+
+        material.emissive.setHex(original.color);
+        material.emissiveIntensity = original.intensity;
+        material.needsUpdate = true;
+      });
+    }
+
+    function restoreEnergyVisuals() {
+      for (const number of [1, 2, 3]) {
+        for (const object of chargerObjects[number]) restoreObjectEmission(object);
+      }
+
+      for (const number of [1, 2, 3]) restoreObjectEmission(vehiclePorts[number]);
+    }
+
+    // ========================================================
+    // ENERGY PULSES
+    // ========================================================
+
+    const energyPulseMeshes = new Set();
+    const energyPulseTimers = [];
+    let energyEffectsActive = false;
+
+    function createEnergyPulses() {
+      stopEnergyPulses();
+      energyEffectsActive = true;
+
+      for (let index = 0; index < 10; index++) {
+        const timer = setTimeout(() => {
+          if (energyEffectsActive) createSinglePulse();
+        }, index * 420);
+        energyPulseTimers.push(timer);
+      }
+    }
+
+    function stopEnergyPulses() {
+      energyEffectsActive = false;
+
+      while (energyPulseTimers.length) {
+        clearTimeout(energyPulseTimers.pop());
+      }
+
+      for (const pulse of energyPulseMeshes) {
+        scene.remove(pulse);
+        pulse.geometry?.dispose?.();
+        pulse.material?.dispose?.();
+      }
+      energyPulseMeshes.clear();
+    }
+
+    function createSinglePulse() {
+      if (!energyEffectsActive) return;
+
+      const pulse = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x38c8ff })
+      );
+
+      energyPulseMeshes.add(pulse);
+      scene.add(pulse);
+
+      const start = new THREE.Vector3(12, 5.2, 2);
+      const end = new THREE.Vector3(-6.5, 4, 3.1);
+      const startTime = performance.now();
+      const duration = 2500;
+
+      function cleanup() {
+        if (!energyPulseMeshes.has(pulse)) return;
+        energyPulseMeshes.delete(pulse);
+        scene.remove(pulse);
+        pulse.geometry.dispose();
+        pulse.material.dispose();
+      }
+
+      function step(now) {
+        if (!energyEffectsActive) {
+          cleanup();
+          return;
+        }
+
+        const progress = Math.min((now - startTime) / duration, 1);
+        pulse.position.lerpVectors(start, end, progress);
+
+        const glow = Math.sin(progress * Math.PI);
+        pulse.scale.setScalar(0.7 + glow * 1.8);
+
+        if (progress < 1) requestAnimationFrame(step);
+        else cleanup();
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    // ========================================================
+    // RESIZE + LOOP
+    // ========================================================
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = Math.min(clock.getDelta(), 0.05);
+      updateMovement(delta);
+      updateInteractionPrompt();
+
+      if (mixer) {
+        try {
+          mixer.update(delta);
+        }
+        catch (error) {
+          console.error("Erro no AnimationMixer:", error);
+          mixer = null;
+        }
+      }
+
+      if (session.state === STATES.DISTRIBUTING) {
+        dashboardData.pulse++;
+        energyEngine.accumulator += delta;
+
+        if (energyEngine.accumulator >= 0.5) {
+          const elapsed = energyEngine.accumulator;
+          energyEngine.accumulator = 0;
+          applyEnergySnapshot(calculateEnergySnapshot(elapsed));
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    drawDashboard();
+    animate();
+  </script>
+</body>
+</html>
